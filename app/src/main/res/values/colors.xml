@@ -1,0 +1,7 @@
+<resources>
+    <color name="ic_launcher_background">#FFFFFF</color>
+    <color name="notification_color">#1F3A5F</color>
+    <color name="splash_background">#FAF7F2</color>
+    <color name="splash_text">#1F3A5F</color>
+    <color name="app_window_background">#FAF7F2</color>
+</resources>

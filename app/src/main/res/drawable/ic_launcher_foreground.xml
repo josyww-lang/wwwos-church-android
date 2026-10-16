@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- The church logo, centred inside the safe area of the app icon. -->
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/church_logo"
+    android:insetBottom="19%"
+    android:insetLeft="19%"
+    android:insetRight="19%"
+    android:insetTop="19%" />

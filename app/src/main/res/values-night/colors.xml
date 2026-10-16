@@ -1,0 +1,5 @@
+<resources>
+    <color name="splash_background">#14171C</color>
+    <color name="splash_text">#FFF4D6</color>
+    <color name="app_window_background">#14171C</color>
+</resources>

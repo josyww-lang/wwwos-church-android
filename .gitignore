@@ -1,0 +1,31 @@
+# ---- Android Studio and Gradle (made by the computer, never saved) ----
+*.iml
+.gradle/
+.kotlin/
+/.idea/
+/local.properties
+/build/
+**/build/
+/captures/
+.externalNativeBuild/
+.cxx/
+.DS_Store
+
+# ---- Secrets: these must NEVER go on GitHub ----
+google-services.json
+*.jks
+*.keystore
+keystore.properties
+service-account*.json
+*-firebase-adminsdk-*.json
+
+# ---- The server ----
+server/functions/node_modules/
+server/functions/.env
+server/.firebase/
+firebase-debug.log
+*.log
+
+# ---- Finished app files (send these by Firebase App Distribution instead) ----
+*.apk
+*.aab

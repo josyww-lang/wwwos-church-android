@@ -1,0 +1,705 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isAdmin() {
+      return isSignedIn()
+        && exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    // An approved church member (or an admin). Used for chat.
+    function isApproved() {
+      return isSignedIn()
+        && (isAdmin()
+            || exists(/databases/$(database)/documents/approvedMembers/$(request.auth.uid)));
+    }
+
+    // True if v is text no longer than max characters.
+    function isText(v, max) {
+      return v is string && v.size() <= max;
+    }
+
+    // ---------- Announcements ----------
+    function validAnnouncement() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['title', 'message', 'category', 'date', 'pinned', 'createdAt', 'authorId',
+                               'edited', 'editedAt', 'history'])
+        && d.keys().hasAll(['title', 'category', 'date', 'pinned', 'createdAt', 'authorId'])
+        && isText(d.title, 120) && d.title.size() > 0
+        && isText(d.get('message', ''), 4000)
+        && d.category in ['service', 'event', 'prayer', 'community', 'urgent']
+        && d.date is timestamp
+        && d.pinned is bool
+        && d.createdAt is timestamp
+        && isText(d.authorId, 128)
+        && d.get('edited', false) is bool
+        && d.get('history', []) is list && d.get('history', []).size() <= 20;
+    }
+
+    match /announcements/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && validAnnouncement()
+                    && request.resource.data.authorId == request.auth.uid;
+      allow update: if isAdmin() && validAnnouncement();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Sermons ----------
+    // Reactions on a sermon: each person adds or removes only their own emoji, from a fixed set.
+    function sermonReactionChangeOk(before, after, e) {
+      let b = before.get(e, []).toSet();
+      let a = after.get(e, []).toSet();
+      return a.difference(b).hasOnly([request.auth.uid]) && b.difference(a).hasOnly([request.auth.uid]);
+    }
+
+    function sermonReactionsOk() {
+      let before = resource.data.get('reactions', {});
+      let after = request.resource.data.get('reactions', {});
+      return after.keys().hasOnly(['👍', '🙏', '💙', '🙌', '😊', '😢'])
+        && sermonReactionChangeOk(before, after, '👍')
+        && sermonReactionChangeOk(before, after, '🙏')
+        && sermonReactionChangeOk(before, after, '💙')
+        && sermonReactionChangeOk(before, after, '🙌')
+        && sermonReactionChangeOk(before, after, '😊')
+        && sermonReactionChangeOk(before, after, '😢');
+    }
+
+    function validSermon() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['title', 'speaker', 'date', 'language', 'series', 'description',
+                               'youtubeId', 'audioPath', 'audioUrl', 'published', 'createdAt', 'authorId', 'reactions'])
+        && d.keys().hasAll(['title', 'date', 'language', 'published', 'createdAt', 'authorId'])
+        && d.get('reactions', {}) is map
+        && isText(d.title, 120) && d.title.size() > 0
+        && isText(d.get('speaker', ''), 80)
+        && d.date is timestamp
+        && d.language in ['en', 'nb', 'om']
+        && isText(d.get('series', ''), 80)
+        && isText(d.get('description', ''), 2000)
+        && (d.get('youtubeId', '') == '' || (isText(d.youtubeId, 11) && d.youtubeId.matches('[A-Za-z0-9_-]{11}')))
+        && (d.get('audioPath', '') == '' || (isText(d.audioPath, 200) && d.audioPath.matches('sermons/.*')))
+        && (d.get('audioUrl', '') == '' || (isText(d.audioUrl, 500) && d.audioUrl.matches('https://.*')))
+        && d.published is bool
+        && d.createdAt is timestamp
+        && isText(d.authorId, 128);
+    }
+
+    // Anyone signed in can read (drafts are hidden in the app, not secret). Only admins can change.
+    match /sermons/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && validSermon()
+                    && request.resource.data.authorId == request.auth.uid;
+      allow update: if isAdmin() && validSermon();
+      // Any approved member can add or remove their own reaction, from a fixed set of emojis.
+      allow update: if isApproved()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+                    && sermonReactionsOk();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Comments under a sermon (approved members) ----------
+    function validComment() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['text', 'authorId', 'authorName', 'createdAt', 'likes', 'replyToId', 'replyToName', 'replyToText', 'imagePath', 'thumb'])
+        && d.keys().hasAll(['text', 'authorId', 'authorName', 'createdAt', 'likes'])
+        && isText(d.text, 1000) && d.text.size() > 0
+        && isText(d.authorName, 60)
+        && d.likes is list && d.likes.size() == 0
+        && isText(d.get('replyToId', ''), 64)
+        && isText(d.get('replyToName', ''), 60)
+        && isText(d.get('replyToText', ''), 150);
+    }
+
+    function likesChangeOnlySelf() {
+      let before = resource.data.likes.toSet();
+      let after = request.resource.data.likes.toSet();
+      return request.resource.data.likes is list
+        && request.resource.data.likes.size() <= 500
+        && after.difference(before).hasOnly([request.auth.uid])
+        && before.difference(after).hasOnly([request.auth.uid]);
+    }
+
+    match /sermons/{sermonId}/comments/{commentId} {
+      allow read: if isApproved();
+      allow create: if isApproved() && validComment()
+                    && request.resource.data.authorId == request.auth.uid
+                    && request.resource.data.createdAt == request.time;
+      allow update: if isApproved()
+                    && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['likes'])
+                    && likesChangeOnlySelf();
+      allow delete: if isApproved() && (isAdmin() || resource.data.authorId == request.auth.uid);
+    }
+
+    // ---------- Church settings (how to give) ----------
+    function validGiving() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['vippsNumber', 'accountName', 'accountNumber', 'iban', 'note'])
+        && isText(d.get('vippsNumber', ''), 20)
+        && isText(d.get('accountName', ''), 80)
+        && isText(d.get('accountNumber', ''), 20)
+        && isText(d.get('iban', ''), 40)
+        && isText(d.get('note', ''), 500);
+    }
+
+    match /settings/giving {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && validGiving();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Church details (address, phone, welcome texts) ----------
+    function validChurchInfo() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['address', 'phone', 'email', 'website', 'facebook', 'youtube',
+                               'serviceTimes', 'welcomeEn', 'welcomeNb', 'welcomeOm',
+                               'newHereEn', 'newHereNb', 'newHereOm'])
+        && isText(d.get('address', ''), 200)
+        && isText(d.get('phone', ''), 30)
+        && isText(d.get('email', ''), 120)
+        && isText(d.get('website', ''), 200)
+        && isText(d.get('facebook', ''), 200)
+        && isText(d.get('youtube', ''), 200)
+        && isText(d.get('serviceTimes', ''), 400)
+        && isText(d.get('welcomeEn', ''), 600)
+        && isText(d.get('welcomeNb', ''), 600)
+        && isText(d.get('welcomeOm', ''), 600)
+        && isText(d.get('newHereEn', ''), 1500)
+        && isText(d.get('newHereNb', ''), 1500)
+        && isText(d.get('newHereOm', ''), 1500);
+    }
+
+    match /settings/church {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && validChurchInfo();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Live stream banner (an admin, or the notification server, sets it) ----------
+    function validLive() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['live', 'url', 'title', 'source', 'updatedAt'])
+        && d.live is bool
+        && isText(d.get('url', ''), 300)
+        && (d.get('url', '') == '' || d.url.matches('https://.*'))
+        && isText(d.get('title', ''), 100)
+        && d.get('source', 'manual') == 'manual'
+        && d.updatedAt == request.time;
+    }
+
+    match /settings/live {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin() && validLive();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Chat settings (the private-message switch) ----------
+    match /settings/chat {
+      allow read: if isSignedIn();
+      allow create, update: if isAdmin()
+                            && request.resource.data.keys().hasOnly(['dmEnabled'])
+                            && request.resource.data.dmEnabled is bool;
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Member profiles ----------
+    // Each person can read, write and delete their own profile. Admins can read all profiles
+    // so they can approve people for chat.
+    function validUser() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['displayName', 'email', 'phone', 'updatedAt'])
+        && isText(d.displayName, 60) && d.displayName.size() > 0
+        && isText(d.get('email', ''), 254)
+        && (d.get('phone', '') == '' || (isText(d.phone, 16) && d.phone.matches('[+][0-9]{8,15}')));
+    }
+
+    match /users/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+      allow create, update: if isSignedIn() && request.auth.uid == uid && validUser();
+      allow delete: if isSignedIn() && request.auth.uid == uid;
+
+      // People this person has blocked from sending them private messages. Only they can see or change it.
+      match /blocked/{otherUid} {
+        allow read, delete: if isSignedIn() && request.auth.uid == uid;
+        allow create, update: if isSignedIn() && request.auth.uid == uid
+                              && request.resource.data.keys().hasOnly(['at']);
+      }
+    }
+
+    // ---------- Profile pictures ----------
+    // One small picture (a few KB) per person. Approved members and admins can see them.
+    // People can replace or remove their own; admins can remove anyone's.
+    match /avatars/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isApproved());
+      allow create, update: if isSignedIn() && request.auth.uid == uid
+                            && request.resource.data.keys().hasOnly(['photo', 'updatedAt'])
+                            && request.resource.data.photo is bytes
+                            && request.resource.data.photo.size() <= 40000;
+      allow delete: if isSignedIn() && (request.auth.uid == uid || isAdmin());
+    }
+
+    // ---------- Approved members (the chat directory) ----------
+    // Only admins can approve or remove people. Approved members can see each other's names.
+    match /approvedMembers/{uid} {
+      allow read: if isSignedIn() && (request.auth.uid == uid || isApproved());
+      allow create, update: if isAdmin()
+                            && request.resource.data.keys().hasOnly(['name', 'approvedAt', 'approvedBy'])
+                            && isText(request.resource.data.name, 60)
+                            && request.resource.data.approvedAt is timestamp
+                            && isText(request.resource.data.approvedBy, 128);
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Chat groups ----------
+    // Private messaging can be switched off by an admin (settings/chat). On by default.
+    function dmEnabled() {
+      return !exists(/databases/$(database)/documents/settings/chat)
+        || get(/databases/$(database)/documents/settings/chat).data.get('dmEnabled', true) == true;
+    }
+
+    function isApprovedUid(u) {
+      return exists(/databases/$(database)/documents/approvedMembers/$(u))
+        || exists(/databases/$(database)/documents/admins/$(u));
+    }
+
+    function validRoomShape(d) {
+      return d.keys().hasOnly(['name', 'description', 'open', 'createdBy', 'createdByName', 'createdAt',
+                               'memberIds', 'memberNames', 'lastMessageAt', 'lastMessageText', 'lastMessageBy', 'direct',
+                               'pinnedMessageId', 'pinnedText', 'pinnedName', 'color'])
+        && d.keys().hasAll(['name', 'open', 'createdBy', 'createdAt', 'memberIds', 'memberNames'])
+        && isText(d.name, 60) && d.name.size() >= 2
+        && isText(d.get('description', ''), 200)
+        && isText(d.get('createdByName', ''), 60)
+        && d.open is bool
+        && d.get('direct', false) is bool
+        && d.memberIds is list && d.memberIds.size() <= 200
+        && d.memberNames is map
+        && d.memberNames.keys().toSet() == d.memberIds.toSet()
+        && isText(d.get('lastMessageText', ''), 120)
+        && isText(d.get('pinnedMessageId', ''), 40)
+        && isText(d.get('pinnedText', ''), 200)
+        && isText(d.get('pinnedName', ''), 60)
+        && d.get('color', 0) is int && d.get('color', 0) >= 0 && d.get('color', 0) < 12;
+    }
+
+    function onlyChanged(keys) {
+      return request.resource.data.diff(resource.data).affectedKeys().hasOnly(keys);
+    }
+
+    function roomOwnerOrAdmin() {
+      return isAdmin() || resource.data.createdBy == request.auth.uid;
+    }
+
+    function isRoomMember() {
+      return request.auth.uid in resource.data.memberIds;
+    }
+
+    function joinsOnlySelf() {
+      let before = resource.data.memberIds.toSet();
+      let after = request.resource.data.memberIds.toSet();
+      return after.difference(before).hasOnly([request.auth.uid]) && before.difference(after).size() == 0;
+    }
+
+    function leavesOnlySelf() {
+      let before = resource.data.memberIds.toSet();
+      let after = request.resource.data.memberIds.toSet();
+      return before.difference(after).hasOnly([request.auth.uid]) && after.difference(before).size() == 0;
+    }
+
+    match /chatRooms/{roomId} {
+      // A private conversation: exactly two people, one of them me, the other an approved member
+      // who has not blocked me, and only while an admin allows private messages.
+      function directOk() {
+        let d = request.resource.data;
+        return d.get('direct', false) == false
+          || (d.open == false
+              && d.name == 'direct'
+              && roomId.matches('dm_.*')
+              && d.memberIds.size() == 2
+              && isApprovedUid(d.memberIds.removeAll([request.auth.uid])[0])
+              && dmEnabled()
+              && !exists(/databases/$(database)/documents/users/$(d.memberIds.removeAll([request.auth.uid])[0])/blocked/$(request.auth.uid)));
+      }
+
+      // Open groups can be browsed by any approved member. Invite-only groups only by their members.
+      allow read: if isApproved()
+                  && (isAdmin() || resource.data.open == true || request.auth.uid in resource.data.memberIds);
+
+      allow create: if isApproved()
+                    && validRoomShape(request.resource.data)
+                    && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.createdAt == request.time
+                    && request.auth.uid in request.resource.data.memberIds
+                    && directOk();
+
+      allow update: if isApproved() && (
+        // the owner or an admin can change the group
+        (roomOwnerOrAdmin()
+          && resource.data.get('direct', false) == false
+          && validRoomShape(request.resource.data)
+          && request.resource.data.createdBy == resource.data.createdBy
+          && request.resource.data.createdAt == resource.data.createdAt)
+        // a member updates the "last message" preview
+        || (isRoomMember()
+          && onlyChanged(['lastMessageAt', 'lastMessageText', 'lastMessageBy'])
+          && request.resource.data.lastMessageAt == request.time
+          && request.resource.data.lastMessageBy == request.auth.uid
+          && isText(request.resource.data.lastMessageText, 120))
+        // a member changes the group's colour
+        || (isRoomMember()
+          && resource.data.get('direct', false) == false
+          && onlyChanged(['color'])
+          && request.resource.data.color is int
+          && request.resource.data.color >= 0 && request.resource.data.color < 12)
+        // someone joins an open group
+        || (resource.data.open == true
+          && onlyChanged(['memberIds', 'memberNames'])
+          && joinsOnlySelf()
+          && request.resource.data.memberIds.size() <= 200
+          && request.resource.data.memberNames.keys().toSet() == request.resource.data.memberIds.toSet())
+        // a member leaves
+        || (isRoomMember()
+          && resource.data.get('direct', false) == false
+          && onlyChanged(['memberIds', 'memberNames'])
+          && leavesOnlySelf()
+          && request.resource.data.memberNames.keys().toSet() == request.resource.data.memberIds.toSet())
+      );
+
+      allow delete: if isApproved()
+                    && (isAdmin() || (resource.data.get('direct', false) == false && resource.data.createdBy == request.auth.uid));
+
+      // ----- Phone numbers members chose to share with this group's leader -----
+      match /phones/{phoneUid} {
+        function roomData() {
+          return get(/databases/$(database)/documents/chatRooms/$(roomId)).data;
+        }
+
+        // Only the person themself, the group owner and admins can see a shared number.
+        // Visible to: the person themself, admins, the group owner, and (only if the person chose
+        // "everyone in the group") the other members of that group.
+        allow read: if isApproved()
+                    && (isAdmin() || request.auth.uid == phoneUid
+                        || (roomData().get('direct', false) == false && roomData().createdBy == request.auth.uid)
+                        || (roomData().get('direct', false) == false
+                            && request.auth.uid in roomData().memberIds
+                            && resource.data.audience == 'group'));
+
+        // A member shares their own number with a group they belong to.
+        allow create, update: if isApproved()
+                              && request.auth.uid == phoneUid
+                              && request.auth.uid in roomData().memberIds
+                              && roomData().get('direct', false) == false
+                              && request.resource.data.keys().hasOnly(['phone', 'audience'])
+                              && request.resource.data.audience in ['leaders', 'group']
+                              && request.resource.data.phone is string
+                              && request.resource.data.phone.matches('[+][0-9]{8,15}');
+
+        // Stop sharing: the member, or the owner or an admin (for example when removing the member).
+        allow delete: if isApproved()
+                      && (request.auth.uid == phoneUid || isAdmin() || roomData().createdBy == request.auth.uid);
+      }
+
+      // ----- Read receipts: when each member last opened the conversation -----
+      match /reads/{readUid} {
+        function roomForReads() {
+          return get(/databases/$(database)/documents/chatRooms/$(roomId)).data;
+        }
+
+        allow read: if isApproved() && (isAdmin() || request.auth.uid in roomForReads().memberIds);
+
+        // Each person records only their own, and only with the real server time.
+        allow create, update: if isApproved()
+                              && request.auth.uid == readUid
+                              && request.auth.uid in roomForReads().memberIds
+                              && request.resource.data.keys().hasOnly(['at'])
+                              && request.resource.data.at == request.time;
+
+        allow delete: if isApproved()
+                      && (request.auth.uid == readUid || isAdmin()
+                          || (roomForReads().get('direct', false) == false && roomForReads().createdBy == request.auth.uid));
+      }
+
+      // ----- Messages -----
+      match /messages/{msgId} {
+        function room() {
+          return get(/databases/$(database)/documents/chatRooms/$(roomId)).data;
+        }
+
+        // Admins, and the owner of a group. Nobody has owner powers in a private conversation.
+        function isRoomLeader() {
+          return isAdmin() || (!room().get('direct', false) && room().createdBy == request.auth.uid);
+        }
+
+        // In a private conversation, messages are allowed only while an admin allows them
+        // and the other person has not blocked the sender.
+        function dmOk() {
+          return !room().get('direct', false)
+            || (dmEnabled()
+                && !exists(/databases/$(database)/documents/users/$(room().memberIds.removeAll([request.auth.uid])[0])/blocked/$(request.auth.uid)));
+        }
+
+        allow read: if isApproved() && (isAdmin() || request.auth.uid in room().memberIds);
+
+        function msgKind() {
+          return request.resource.data.get('kind', 'text');
+        }
+
+        // A normal message can be posted by any group member. A voice-call card can only be posted by
+        // the group owner or an admin.
+        allow create: if isApproved()
+                      && request.auth.uid in room().memberIds
+                      && request.resource.data.keys().hasOnly(['text', 'senderId', 'senderName', 'createdAt', 'deleted',
+                                                               'kind', 'callRoom', 'callEnded',
+                                                               'replyToId', 'replyToName', 'replyToText'])
+                      && request.resource.data.keys().hasAll(['text', 'senderId', 'senderName', 'createdAt'])
+                      && isText(request.resource.data.text, 2000)
+                      && (request.resource.data.text.size() > 0 || request.resource.data.get('imagePath', '') != '')
+                      && isText(request.resource.data.get('imagePath', ''), 200)
+                      && (request.resource.data.get('imagePath', '') == ''
+                          || request.resource.data.imagePath.matches('chat/' + roomId + '/[A-Za-z0-9]+[.]jpg'))
+                      && (!('thumb' in request.resource.data)
+                          || (request.resource.data.thumb is bytes && request.resource.data.thumb.size() <= 40000))
+                      && isText(request.resource.data.senderName, 60)
+                      && isText(request.resource.data.get('replyToId', ''), 40)
+                      && isText(request.resource.data.get('replyToName', ''), 60)
+                      && isText(request.resource.data.get('replyToText', ''), 120)
+                      && request.resource.data.senderId == request.auth.uid
+                      && request.resource.data.createdAt == request.time
+                      && dmOk()
+                      && (
+                           (msgKind() == 'text' && !request.resource.data.keys().hasAny(['callRoom', 'callEnded']))
+                           || (msgKind() == 'call'
+                               && isRoomLeader()
+                               && !room().get('direct', false)
+                               && isText(request.resource.data.get('callRoom', ''), 80)
+                               && request.resource.data.get('callRoom', '').size() >= 16)
+                         );
+
+        // Reactions: each person has at most one, stored under their own id as an emoji. They can change or
+        // remove their own, and nobody else's.
+        function reactionsOk() {
+          let before = resource.data.get('reactions', {});
+          let after = request.resource.data.get('reactions', {});
+          return after is map
+            && after.diff(before).affectedKeys().hasOnly([request.auth.uid])
+            && (!(request.auth.uid in after)
+                || (after[request.auth.uid] is string
+                    && after[request.auth.uid].size() > 0
+                    && after[request.auth.uid].size() <= 16));
+        }
+
+        allow update: if isApproved() && (
+          // a group member adds or removes their own reaction
+          (request.auth.uid in room().memberIds
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['reactions'])
+            && reactionsOk())
+          // changing the text of my own message (the old text is kept in "history")
+          || (resource.data.senderId == request.auth.uid
+              && request.auth.uid in room().memberIds
+              && resource.data.get('kind', 'text') == 'text'
+              && resource.data.get('deleted', false) == false
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['text', 'edited', 'editedAt', 'history'])
+              && request.resource.data.edited == true
+              && request.resource.data.editedAt == request.time
+              && isText(request.resource.data.text, 2000) && request.resource.data.text.size() > 0
+              && request.resource.data.history is list
+              && request.resource.data.history.size() >= 1 && request.resource.data.history.size() <= 20
+              && request.resource.data.history[request.resource.data.history.size() - 1].text == resource.data.text)
+          // removing a message: its sender, the group owner or an admin (the text is blanked, not kept)
+          || ((isRoomLeader() || resource.data.senderId == request.auth.uid)
+              && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['deleted', 'text', 'imagePath', 'thumb'])
+              && request.resource.data.deleted == true
+              && request.resource.data.text == '')
+        );
+
+        // Used when the owner or an admin deletes a whole group.
+        allow delete: if isApproved() && isRoomLeader();
+      }
+    }
+
+    // ---------- Chat reports (only admins can read them) ----------
+    match /chatReports/{id} {
+      allow read, delete: if isAdmin();
+      allow create: if isApproved()
+                    && request.resource.data.keys().hasOnly(['roomId', 'roomName', 'messageId', 'messageText',
+                                                             'senderId', 'senderName', 'reporterId', 'reporterName', 'createdAt'])
+                    && request.resource.data.reporterId == request.auth.uid
+                    && request.resource.data.createdAt == request.time
+                    && isText(request.resource.data.messageText, 2000)
+                    && isText(request.resource.data.roomName, 60)
+                    && isText(request.resource.data.senderName, 60)
+                    && isText(request.resource.data.reporterName, 60);
+    }
+
+    // ---------- Events (admins create; everyone signed in can read and answer) ----------
+    function validEvent() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['title', 'description', 'location', 'start', 'createdBy', 'createdAt'])
+        && d.keys().hasAll(['title', 'start', 'createdBy', 'createdAt'])
+        && isText(d.title, 120) && d.title.size() > 0
+        && isText(d.get('description', ''), 2000)
+        && isText(d.get('location', ''), 120)
+        && d.start is timestamp
+        && d.createdAt is timestamp
+        && isText(d.createdBy, 128);
+    }
+
+    match /events/{eventId} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && validEvent() && request.resource.data.createdBy == request.auth.uid;
+      allow update: if isAdmin() && validEvent();
+      allow delete: if isAdmin();
+
+      // "Will you come?" answers: each person writes only their own.
+      match /rsvps/{rsvpUid} {
+        allow read: if isSignedIn();
+        allow create, update: if isSignedIn() && request.auth.uid == rsvpUid
+                              && request.resource.data.keys().hasOnly(['status', 'name', 'at'])
+                              && request.resource.data.status in ['going', 'maybe', 'no']
+                              && isText(request.resource.data.name, 60)
+                              && request.resource.data.at == request.time;
+        allow delete: if isSignedIn() && (request.auth.uid == rsvpUid || isAdmin());
+      }
+    }
+
+    // ---------- Prayer requests ----------
+    // "prayers" are visible to approved members. "leaderPrayers" only to admins and the person who wrote them.
+    function validPrayer() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['text', 'authorId', 'authorName', 'anonymous', 'createdAt', 'prayedBy', 'answered'])
+        && d.keys().hasAll(['text', 'authorId', 'anonymous', 'createdAt', 'prayedBy', 'answered'])
+        && isText(d.text, 1000) && d.text.size() > 0
+        && d.authorId == request.auth.uid
+        && isText(d.get('authorName', ''), 60)
+        && d.anonymous is bool
+        && (d.anonymous == false || d.get('authorName', '') == '')
+        && d.createdAt == request.time
+        && d.prayedBy is list && d.prayedBy.size() == 0
+        && d.answered == false;
+    }
+
+    // Someone taps "I prayed": they add or remove only themselves.
+    function prayedOk() {
+      let before = resource.data.prayedBy.toSet();
+      let after = request.resource.data.prayedBy.toSet();
+      return request.resource.data.prayedBy.size() <= 500
+        && after.difference(before).hasOnly([request.auth.uid])
+        && before.difference(after).hasOnly([request.auth.uid]);
+    }
+
+    function prayerUpdateOk() {
+      let changed = request.resource.data.diff(resource.data).affectedKeys();
+      return (changed.hasOnly(['prayedBy']) && prayedOk())
+        || (changed.hasOnly(['answered']) && request.resource.data.answered is bool
+            && (resource.data.authorId == request.auth.uid || isAdmin()))
+        // the author changes the wording (the old text is kept in "history")
+        || (resource.data.authorId == request.auth.uid
+            && changed.hasOnly(['text', 'edited', 'editedAt', 'history'])
+            && request.resource.data.edited == true
+            && request.resource.data.editedAt == request.time
+            && isText(request.resource.data.text, 1000) && request.resource.data.text.size() > 0
+            && request.resource.data.history is list
+            && request.resource.data.history.size() >= 1 && request.resource.data.history.size() <= 20
+            && request.resource.data.history[request.resource.data.history.size() - 1].text == resource.data.text);
+    }
+
+    match /prayers/{prayerId} {
+      allow read: if isApproved();
+      allow create: if isApproved() && validPrayer();
+      allow update: if isApproved() && prayerUpdateOk();
+      allow delete: if isApproved() && (resource.data.authorId == request.auth.uid || isAdmin());
+    }
+
+    match /leaderPrayers/{prayerId} {
+      allow read: if isApproved() && (isAdmin() || resource.data.authorId == request.auth.uid);
+      allow create: if isApproved() && validPrayer();
+      allow update: if isApproved()
+                    && (isAdmin() || resource.data.authorId == request.auth.uid)
+                    && prayerUpdateOk();
+      allow delete: if isApproved() && (resource.data.authorId == request.auth.uid || isAdmin());
+    }
+
+    // ---------- Serving rota ----------
+    function validSlot() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['title', 'notes', 'start', 'needed', 'volunteers', 'volunteerNames', 'createdBy', 'createdAt'])
+        && d.keys().hasAll(['title', 'start', 'needed', 'volunteers', 'volunteerNames', 'createdBy', 'createdAt'])
+        && isText(d.title, 80) && d.title.size() > 0
+        && isText(d.get('notes', ''), 300)
+        && d.start is timestamp
+        && d.needed is int && d.needed >= 1 && d.needed <= 50
+        && d.volunteers is list && d.volunteers.size() <= 50
+        && d.volunteerNames is map
+        && d.volunteerNames.keys().toSet() == d.volunteers.toSet()
+        && isText(d.createdBy, 128)
+        && d.createdAt is timestamp;
+    }
+
+    // A person adding or removing only themselves, without going over the number needed.
+    function slotSignupOk() {
+      let before = resource.data.volunteers.toSet();
+      let after = request.resource.data.volunteers.toSet();
+      return onlyChanged(['volunteers', 'volunteerNames'])
+        && request.resource.data.volunteers is list
+        && request.resource.data.volunteerNames is map
+        && request.resource.data.volunteerNames.keys().toSet() == after
+        && after.difference(before).hasOnly([request.auth.uid])
+        && before.difference(after).hasOnly([request.auth.uid])
+        && (request.resource.data.volunteers.size() <= resource.data.needed
+            || request.resource.data.volunteers.size() <= resource.data.volunteers.size());
+    }
+
+    match /servingSlots/{id} {
+      allow read: if isSignedIn();
+      allow create: if isAdmin() && validSlot() && request.resource.data.createdBy == request.auth.uid
+                    && request.resource.data.volunteers.size() == 0;
+      allow update: if isAdmin() && validSlot();
+      allow update: if isSignedIn() && slotSignupOk();
+      allow delete: if isAdmin();
+    }
+
+    // ---------- Feedback to the leaders (only admins can read it) ----------
+    function validFeedback() {
+      let d = request.resource.data;
+      return d.keys().hasOnly(['text', 'category', 'anonymous', 'authorId', 'authorName', 'createdAt', 'status'])
+        && d.keys().hasAll(['text', 'category', 'anonymous', 'createdAt', 'status'])
+        && isText(d.text, 2000) && d.text.size() > 0
+        && d.category in ['idea', 'concern', 'praise', 'other']
+        && d.anonymous is bool
+        && d.status == 'new'
+        && d.createdAt == request.time
+        && ((d.anonymous == true && !d.keys().hasAny(['authorId', 'authorName']))
+            || (d.anonymous == false && d.get('authorId', '') == request.auth.uid && isText(d.get('authorName', ''), 60)));
+    }
+
+    match /feedback/{id} {
+      allow create: if isSignedIn() && validFeedback();
+      allow read, delete: if isAdmin();
+      allow update: if isAdmin() && onlyChanged(['status']) && request.resource.data.status in ['new', 'done'];
+    }
+
+    // ---------- Notification addresses ----------
+    // The phone registers its notification token here, so the notification server can find it.
+    // Only the person themself can read or change their own.
+    match /fcmTokens/{tokenUid} {
+      allow read, delete: if isSignedIn() && request.auth.uid == tokenUid;
+      allow create, update: if isSignedIn() && request.auth.uid == tokenUid
+                            && request.resource.data.keys().hasOnly(['tokens', 'muted'])
+                            && request.resource.data.get('tokens', []) is list
+                            && request.resource.data.get('tokens', []).size() <= 10
+                            && request.resource.data.get('muted', []) is list
+                            && request.resource.data.get('muted', []).size() <= 300;
+    }
+
+    // ---------- Admin list ----------
+    // A person can check whether they are an admin. Nobody can edit this
+    // list from the app; add admins in the Firebase console.
+    match /admins/{uid} {
+      allow read: if isSignedIn() && request.auth.uid == uid;
+      allow write: if false;
+    }
+  }
+}

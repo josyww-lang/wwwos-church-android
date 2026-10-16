@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- What shows from the very first moment (Android 11 and older): the logo on the start colour. Its size matches where the
+     zoom begins inside the app, so the logo simply starts to grow. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:drawable="@color/splash_background" />
+    <item
+        android:width="179dp"
+        android:height="179dp"
+        android:gravity="center">
+        <bitmap
+            android:gravity="fill"
+            android:src="@drawable/church_logo" />
+    </item>
+</layer-list>
