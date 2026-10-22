@@ -28,7 +28,9 @@ data class ChurchInfo(
     val welcomeOm: String = "",
     val newHereEn: String = "",
     val newHereNb: String = "",
-    val newHereOm: String = ""
+    val newHereOm: String = "",
+    /** The link to download the app (Google Play, or a Drive or Firebase App Distribution link until then); used by "Share the app". */
+    val appLink: String = ""
 ) {
 
     val hasAnyContact: Boolean
@@ -71,7 +73,8 @@ class ChurchInfoRepository(db: FirebaseFirestore = FirebaseFirestore.getInstance
                             website = s("website"), facebook = s("facebook"), youtube = s("youtube"),
                             serviceTimes = s("serviceTimes"),
                             welcomeEn = s("welcomeEn"), welcomeNb = s("welcomeNb"), welcomeOm = s("welcomeOm"),
-                            newHereEn = s("newHereEn"), newHereNb = s("newHereNb"), newHereOm = s("newHereOm")
+                            newHereEn = s("newHereEn"), newHereNb = s("newHereNb"), newHereOm = s("newHereOm"),
+                            appLink = s("appLink")
                         )
                     )
                 )
@@ -86,7 +89,8 @@ class ChurchInfoRepository(db: FirebaseFirestore = FirebaseFirestore.getInstance
             "website" to info.website, "facebook" to info.facebook, "youtube" to info.youtube,
             "serviceTimes" to info.serviceTimes,
             "welcomeEn" to info.welcomeEn, "welcomeNb" to info.welcomeNb, "welcomeOm" to info.welcomeOm,
-            "newHereEn" to info.newHereEn, "newHereNb" to info.newHereNb, "newHereOm" to info.newHereOm
+            "newHereEn" to info.newHereEn, "newHereNb" to info.newHereNb, "newHereOm" to info.newHereOm,
+            "appLink" to info.appLink
         )
         withTimeout(15_000) { ref.set(data).await() }
     }

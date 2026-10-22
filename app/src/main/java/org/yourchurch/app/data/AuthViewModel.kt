@@ -312,13 +312,20 @@ class AuthViewModel : ViewModel() {
     }
 
     /**
-     * Removes what belongs to this person and is theirs to delete: their sermon notes, the people they blocked, the
+     * Removes what belongs to this person and is theirs to delete: their sermon notes, their personal notes, the people they blocked, the
      * messages they scheduled, and their ticks in the reading plans. (Their profile, picture and notification address
      * are removed separately.)
      */
     private suspend fun deleteMyData(uid: String) {
         runCatching {
             db.collection("users").document(uid).collection("sermonNotes").get().await().documents.forEach { it.reference.delete().await() }
+        }
+        runCatching { db.collection("presence").document(uid).delete().await() }
+        runCatching {
+            db.collection("users").document(uid).collection("highlights").get().await().documents.forEach { it.reference.delete().await() }
+        }
+        runCatching {
+            db.collection("users").document(uid).collection("notes").get().await().documents.forEach { it.reference.delete().await() }
         }
         runCatching {
             db.collection("users").document(uid).collection("blocked").get().await().documents.forEach { it.reference.delete().await() }

@@ -132,7 +132,9 @@ import org.yourchurch.app.data.otherUid
 import org.yourchurch.app.ui.common.EditedTag
 import org.yourchurch.app.ui.common.GroupAvatar
 import org.yourchurch.app.ui.common.PersonAvatar
+import org.yourchurch.app.ui.common.PresenceLine
 import org.yourchurch.app.ui.common.SkeletonCards
+import org.yourchurch.app.ui.common.rememberPresence
 import org.yourchurch.app.ui.theme.groupColor
 import org.yourchurch.app.ui.theme.isAppDark
 
@@ -355,6 +357,8 @@ fun RoomScreen(
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            } else {
+                                PresenceLine(rememberPresence(room.otherUid(myUid)))
                             }
                         }
                     }

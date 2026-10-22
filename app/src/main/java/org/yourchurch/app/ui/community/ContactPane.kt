@@ -217,6 +217,7 @@ private fun ContactForm(initial: ChurchInfo, onSave: suspend (ChurchInfo) -> Res
     var welcomeEn by rememberSaveable { mutableStateOf(initial.welcomeEn) }
     var welcomeNb by rememberSaveable { mutableStateOf(initial.welcomeNb) }
     var welcomeOm by rememberSaveable { mutableStateOf(initial.welcomeOm) }
+    var appLink by rememberSaveable { mutableStateOf(initial.appLink) }
     var saving by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -261,6 +262,7 @@ private fun ContactForm(initial: ChurchInfo, onSave: suspend (ChurchInfo) -> Res
             field(welcomeEn, R.string.contact_f_welcome_en, 600, 3) { welcomeEn = it }
             field(welcomeNb, R.string.contact_f_welcome_nb, 600, 3) { welcomeNb = it }
             field(welcomeOm, R.string.contact_f_welcome_om, 600, 3) { welcomeOm = it }
+            field(appLink, R.string.contact_f_applink, 300) { appLink = it }
 
             if (failed) Text(stringResource(R.string.err_save_failed), color = MaterialTheme.colorScheme.error)
 
@@ -274,7 +276,9 @@ private fun ContactForm(initial: ChurchInfo, onSave: suspend (ChurchInfo) -> Res
                                 address = address.trim(), phone = phone.trim(), email = email.trim(),
                                 website = website.trim(), facebook = facebook.trim(), youtube = youtube.trim(),
                                 serviceTimes = services.trim(),
-                                welcomeEn = welcomeEn.trim(), welcomeNb = welcomeNb.trim(), welcomeOm = welcomeOm.trim()
+                                welcomeEn = welcomeEn.trim(), welcomeNb = welcomeNb.trim(), welcomeOm = welcomeOm.trim(),
+                                // A link must start with https:// so that people can open it.
+                                appLink = appLink.trim().let { if (it.isNotEmpty() && !it.startsWith("http", ignoreCase = true)) "https://$it" else it }
                             )
                         )
                         saving = false

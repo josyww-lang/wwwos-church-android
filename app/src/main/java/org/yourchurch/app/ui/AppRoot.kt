@@ -66,10 +66,14 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.delay
+import org.yourchurch.app.AppState
+import org.yourchurch.app.LocaleManager
 import org.yourchurch.app.Notifications
+import org.yourchurch.app.PendingReading
 import org.yourchurch.app.PendingRoom
 import org.yourchurch.app.PendingTarget
 import org.yourchurch.app.R
+import org.yourchurch.app.ReaderRequest
 import org.yourchurch.app.SafetySetup
 import org.yourchurch.app.data.AuthState
 import org.yourchurch.app.data.AuthViewModel
@@ -78,6 +82,7 @@ import org.yourchurch.app.data.BrandingStore
 import org.yourchurch.app.data.ChatReadStore
 import org.yourchurch.app.data.ChatViewModel
 import org.yourchurch.app.data.NotificationPrefs
+import org.yourchurch.app.data.PresenceStore
 import org.yourchurch.app.data.PushTokens
 import org.yourchurch.app.data.SectionSeen
 import org.yourchurch.app.ui.auth.SignInScreen
@@ -112,6 +117,15 @@ fun AppRoot(authVm: AuthViewModel = viewModel()) {
 
     val context = LocalContext.current
     LaunchedEffect(state.user?.uid) { SafetySetup.identify(state.user?.uid) }
+    // While the app is open, tell the others (every 90 seconds) that this person is active.
+    val presenceContext = LocalContext.current.applicationContext
+    LaunchedEffect(state.user?.uid) {
+        if (state.user == null) return@LaunchedEffect
+        while (true) {
+            if (AppState.foreground) PresenceStore.ping(presenceContext)
+            delay(90_000)
+        }
+    }
     LaunchedEffect(Unit) { BrandingStore.start() }
     LaunchedEffect(Unit) {
         Notifications.createChannel(context)
@@ -272,6 +286,19 @@ private fun MainScaffold(auth: AuthState, authVm: AuthViewModel) {
     // A tapped notification about giving, sermons, announcements or events opens that section.
     val pendingTarget = PendingTarget.target
     LaunchedEffect(pendingTarget) {
+        // A tapped verse (the verse of the day, or its notification) opens the Bible at that verse, in the language of the app.
+        if (pendingTarget != null && pendingTarget.startsWith("verse:")) {
+            PendingReading.request = ReaderRequest(
+                pendingTarget.removePrefix("verse:"),
+                when (LocaleManager.languageCode(context)) {
+                    "nb", "nn", "no" -> "nb"
+                    "om" -> "om"
+                    else -> "en"
+                }
+            )
+            wordSection = 0
+            selected = Tab.Word.ordinal
+        }
         when (pendingTarget) {
             "give" -> navigate(HomeTarget.Give)
             "sermons" -> navigate(HomeTarget.Sermons)
@@ -399,7 +426,8 @@ private fun MainScaffold(auth: AuthState, authVm: AuthViewModel) {
                     isAdmin = auth.isAdmin,
                     accountMenu = accountMenu,
                     section = wordSection,
-                    onSectionChange = { wordSection = it }
+                    onSectionChange = { wordSection = it },
+                    onFullScreen = { hideBottomBar = it }
                 )
                 Tab.More -> MoreScreen(
                     uid = user.uid,
@@ -474,7 +502,7 @@ private fun tabPill(tab: Tab, dark: Boolean, home: Color): Color = when (tab) {
  */
 private const val SPLASH_HOLD_MS = 0L
 private const val SPLASH_POP_MS = 600L
-private const val SPLASH_MOVE_MS = 3000L
+private const val SPLASH_MOVE_MS = 5000L
 /** An app that started more than this long ago was already running: it only shows the logo briefly. */
 private const val WARM_START_MS = 8000L
 private const val WARM_SPLASH_MS = 900L

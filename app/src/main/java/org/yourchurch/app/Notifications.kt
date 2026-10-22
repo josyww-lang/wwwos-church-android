@@ -2,6 +2,7 @@ package org.yourchurch.app
 
 import android.Manifest
 import android.annotation.SuppressLint
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -25,6 +26,7 @@ import com.google.firebase.messaging.FirebaseMessaging
 object Notifications {
     const val CHANNEL_ID = "announcements"
     const val CHAT_CHANNEL_ID = "chat_messages"
+    const val VERSE_CHANNEL_ID = "verse_of_day"
     private const val PREFS = "settings"
     private const val KEY_ENABLED = "notifications_enabled"
     private const val KEY_ASKED = "notification_permission_asked"
@@ -102,6 +104,14 @@ object Notifications {
                 NotificationManager.IMPORTANCE_HIGH
             )
         )
+        // The verse of the day: shown in full on the lock screen too.
+        manager.createNotificationChannel(
+            NotificationChannel(
+                VERSE_CHANNEL_ID,
+                context.getString(R.string.notif_channel_verse),
+                NotificationManager.IMPORTANCE_DEFAULT
+            ).apply { lockscreenVisibility = Notification.VISIBILITY_PUBLIC }
+        )
     }
 
     /** Shows a notification ourselves. Used when a message arrives while the app is open. */
@@ -121,7 +131,7 @@ object Notifications {
         val pending = PendingIntent.getActivity(
             context, (roomId ?: target)?.hashCode() ?: 0, intent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
         )
-        val notification = NotificationCompat.Builder(context, if (roomId != null) CHAT_CHANNEL_ID else CHANNEL_ID)
+        val notification = NotificationCompat.Builder(context, if (roomId != null) CHAT_CHANNEL_ID else if (target?.startsWith("verse:") == true) VERSE_CHANNEL_ID else CHANNEL_ID)
             .setSmallIcon(R.drawable.ic_notification)
             .setColor(ContextCompat.getColor(context, R.color.notification_color))
             .setContentTitle(title ?: context.getString(R.string.app_name))
@@ -134,6 +144,7 @@ object Notifications {
                     setPriority(NotificationCompat.PRIORITY_HIGH)
                     setCategory(NotificationCompat.CATEGORY_MESSAGE)
                 }
+                if (target?.startsWith("verse:") == true) setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             }
             .build()
         NotificationManagerCompat.from(context).notify(System.currentTimeMillis().toInt(), notification)

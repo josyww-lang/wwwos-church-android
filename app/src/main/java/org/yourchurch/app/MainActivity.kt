@@ -14,6 +14,7 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
 import com.google.firebase.auth.FirebaseAuth
 import org.yourchurch.app.PendingTarget
+import org.yourchurch.app.data.PresenceStore
 import org.yourchurch.app.ui.AppRoot
 import org.yourchurch.app.ui.theme.ChurchTheme
 import org.yourchurch.app.ui.theme.ThemeSettings
@@ -33,9 +34,11 @@ class MainActivity : ComponentActivity() {
     override fun onStart() {
         super.onStart()
         AppState.foreground = true
+        PresenceStore.ping(this)
     }
 
     override fun onStop() {
+        PresenceStore.ping(this)
         AppState.foreground = false
         super.onStop()
     }

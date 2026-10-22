@@ -113,9 +113,8 @@ fun ChurchEmblem(size: Dp = 64.dp, tint: Color = Color.White) {
     val context = LocalContext.current
     val logoRes = remember { context.resources.getIdentifier("church_logo", "drawable", context.packageName) }
     if (logoRes != 0) {
-        Box(Modifier.size(size).background(Color.White, CircleShape), contentAlignment = Alignment.Center) {
-            Image(painter = painterResource(logoRes), contentDescription = null, modifier = Modifier.size(size * 0.92f))
-        }
+        // The lime ring of the logo reaches the edge of its circle (no white margin around it).
+        Image(painter = painterResource(logoRes), contentDescription = null, modifier = Modifier.size(size))
         return
     }
     Box(

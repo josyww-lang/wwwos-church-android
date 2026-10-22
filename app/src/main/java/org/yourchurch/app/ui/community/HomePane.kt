@@ -4,6 +4,7 @@ import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,7 +24,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Campaign
 import androidx.compose.material.icons.outlined.CardGiftcard
@@ -39,7 +39,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -59,6 +58,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -74,7 +74,6 @@ import java.time.DayOfWeek
 import java.time.LocalDate
 import java.time.YearMonth
 import java.time.ZoneId
-import java.time.format.DateTimeFormatter
 import java.time.temporal.TemporalAdjusters
 import java.util.Calendar
 import java.util.Date
@@ -82,16 +81,18 @@ import java.util.Locale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.yourchurch.app.LocaleManager
+import org.yourchurch.app.PendingTarget
 import org.yourchurch.app.R
 import org.yourchurch.app.data.AnnouncementsViewModel
 import org.yourchurch.app.data.ChurchInfoViewModel
 import org.yourchurch.app.data.EventsViewModel
+import org.yourchurch.app.data.PlansState
 import org.yourchurch.app.data.PlansViewModel
 import org.yourchurch.app.data.ReadingPlan
 import org.yourchurch.app.data.VerseViewModel
-import org.yourchurch.app.data.streakOf
-import org.yourchurch.app.data.toLocalDate
-import org.yourchurch.app.data.todayIndex
+import org.yourchurch.app.data.daysSince
+import org.yourchurch.app.data.nextDayOf
+import org.yourchurch.app.data.readingStreak
 import org.yourchurch.app.ui.common.ChatCircleIcon
 import org.yourchurch.app.ui.common.CrossIcon
 import org.yourchurch.app.ui.theme.ToneKind
@@ -158,13 +159,14 @@ fun HomePane(
     val firstName = myName.trim().substringBefore(' ').substringBefore('@').replaceFirstChar { it.uppercase() }
     val welcome = info.welcomeFor(language)
     val dailyVerse by verseVm.verse.collectAsStateWithLifecycle()
-    // Today's verse from the church's own list, in the person's language (English if that language is empty).
-    val bankVerse by verseVm.bank.collectAsStateWithLifecycle()
-    val bankPair = bankVerse?.forLanguage(language)
+    // Today's verse, in the person's language: the same verse from the online Bible in every language (the server writes it each
+    // morning), or in English if a language has none. The copyright is on one page: More > Bible versions and copyright.
+    val verseLine = dailyVerse?.inLanguage(language) ?: dailyVerse?.inLanguage("en")
     val verse =
-        bankPair?.let { (text, reference) -> if (reference.isBlank()) text else text + "  \u2014  " + reference }
-            ?: dailyVerse?.let { it.text + "  \u2014  " + it.reference }
+        verseLine?.let { if (it.reference.isBlank()) it.text else it.text + "  \u2014  " + it.reference }
             ?: stringResource(R.string.home_default_verse)
+    // Where the verse is ("PSA.89.1"), so a tap opens the Bible at it.
+    val verseRef = dailyVerse?.usfm?.takeIf { it.isNotBlank() } ?: dailyVerse?.reference.orEmpty()
     val nextEvent = remember(events.events) {
         val cutoff = System.currentTimeMillis() - 2 * 3_600_000L
         events.events.filter { it.start.time >= cutoff }.minByOrNull { it.start.time }
@@ -183,12 +185,13 @@ fun HomePane(
     LaunchedEffect(uid, isAdmin, myName) { plansVm.start(uid, myName, isAdmin) }
     // Keep the home-screen widget up to date with what this page shows.
     val appName = stringResource(R.string.church_name)
-    val labelReading = stringResource(R.string.reading_today)
+    val labelReading = stringResource(R.string.reading_next)
     val labelEvent = stringResource(R.string.home_next_event)
     val labelVerse = stringResource(R.string.home_verse_day)
-    LaunchedEffect(plansState.plan, events.events, verse, labelReading) {
+    LaunchedEffect(plansState.plan, plansState.done, plansState.from, events.events, verse, labelReading) {
+        val nextReading = plansState.plan?.let { nextDayOf(plansState.done, plansState.from, it.days.size) } ?: -1
         val upcoming = events.events.filter { it.start.time >= System.currentTimeMillis() - 2 * 3_600_000L }.sortedBy { it.start }
-        WidgetSync.save(context, appName, Triple(labelReading, labelEvent, labelVerse), plansState.plan, upcoming, verse)
+        WidgetSync.save(context, appName, Triple(labelReading, labelEvent, labelVerse), plansState.plan, nextReading, upcoming, verse)
     }
     val hour = remember { Calendar.getInstance().get(Calendar.HOUR_OF_DAY) }
     val greeting = stringResource(
@@ -214,14 +217,17 @@ fun HomePane(
       BoxWithConstraints(Modifier.fillMaxSize()) {
         // The page uses the whole screen: the cards grow with it (and the page scrolls on a small phone).
         val tileRows = ((Favorites.keys.size + 3) / 4).coerceAtLeast(1)
-        val heroMin = maxOf(200.dp, maxHeight * (if (tileRows > 1) 0.32f else 0.38f))
-        val tileHeight = maxOf(88.dp, maxHeight * (if (tileRows > 1) 0.115f else 0.15f))
+        val heroMin = maxOf(170.dp, maxHeight * (if (tileRows > 1) 0.25f else 0.30f))
+        // A tile is never shorter than its content: the padding, the icon circle and one line of label (which grows with
+        // the phone's text size). Before, a taller top card made the screen fraction smaller than that and cut the labels.
+        val tileMin = 74.dp + 24.dp * LocalDensity.current.fontScale
+        val tileHeight = maxOf(tileMin, maxHeight * (if (tileRows > 1) 0.115f else 0.15f))
         val cardMin = maxOf(88.dp, maxHeight * 0.14f)
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(start = 16.dp, end = 16.dp, top = 22.dp, bottom = 6.dp),
+                .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 6.dp),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             // Live now (red) while we stream; otherwise a calm strip with the next service and the YouTube link
@@ -235,13 +241,14 @@ fun HomePane(
                     .shadow(6.dp, RoundedCornerShape(28.dp))
                     .clip(RoundedCornerShape(28.dp))
                     .background(heroBrush())
-                    .padding(horizontal = 24.dp, vertical = 22.dp),
+                    // A very little less room above "Good evening" (it was 22), to make up for the taller top card.
+                    .padding(start = 24.dp, end = 24.dp, top = 16.dp, bottom = 16.dp),
                 verticalArrangement = Arrangement.Center
             ) {
                 Text(greeting, style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp), color = Color.White.copy(alpha = 0.9f))
                 Text(
                     if (firstName.isNotBlank()) stringResource(R.string.home_welcome, firstName) else stringResource(R.string.home_welcome_default),
-                    style = MaterialTheme.typography.headlineMedium.copy(fontSize = 36.sp, lineHeight = 44.sp),
+                    style = MaterialTheme.typography.headlineMedium.copy(fontSize = 32.sp, lineHeight = 40.sp),
                     color = Color.White
                 )
                 if (welcome.isNotBlank()) {
@@ -249,13 +256,15 @@ fun HomePane(
                     Text(welcome, style = MaterialTheme.typography.bodyLarge, color = Color.White.copy(alpha = 0.92f))
                 }
                 if (verse.isNotBlank()) {
-                    Spacer(Modifier.height(16.dp))
+                    Spacer(Modifier.height(12.dp))
                     // The verse sits on a panel of its own colour (a warm tint of the second colour), so it stands out.
                     Column(
                         Modifier
                             .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
                             .background(highlightColor().copy(alpha = 0.22f), RoundedCornerShape(16.dp))
-                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                            .clickable { PendingTarget.target = "verse:" + verseRef }
+                            .padding(horizontal = 14.dp, vertical = 10.dp)
                     ) {
                         Text(
                             stringResource(R.string.home_verse_day),
@@ -263,7 +272,9 @@ fun HomePane(
                             color = Color(0xFFF1D98A)
                         )
                         Spacer(Modifier.height(2.dp))
-                        Text(verse, style = MaterialTheme.typography.bodyLarge, color = Color.White)
+                        Text(verse, style = MaterialTheme.typography.bodyLarge.copy(lineHeight = 23.sp), color = Color.White)
+                        Spacer(Modifier.height(4.dp))
+                        Text(stringResource(R.string.home_verse_read), style = MaterialTheme.typography.labelMedium, color = Color(0xFFF1D98A))
                     }
                 }
             }
@@ -307,16 +318,16 @@ fun HomePane(
                 }
             }
 
-            // Today's Bible reading, while there is a plan running
+            // The next Bible reading: the first day of the plan this person has not read (the plan waits if they stop)
             plansState.plan?.let { plan ->
-                val index = plan.todayIndex()
-                if (index < plan.days.size) {
+                val next = nextDayOf(plansState.done, plansState.from, plan.days.size)
+                if (next < plan.days.size) {
                     ReadingCard(
                         plan = plan,
-                        index = index,
-                        done = plansState.done,
+                        index = next,
+                        state = plansState,
                         minHeight = cardMin,
-                        onToggle = { plansVm.toggleDay(index) },
+                        onToggle = { plansVm.toggleDay(next) },
                         onClick = { onNavigate(HomeTarget.Reading) }
                     )
                 }
@@ -532,8 +543,10 @@ private fun EventCard(event: org.yourchurch.app.data.Event?, minHeight: Dp, onCl
 
 /** Today's reading from the plan, with a button to tick it off. Tapping the card opens the plan. */
 @Composable
-private fun ReadingCard(plan: ReadingPlan, index: Int, done: Set<Int>, minHeight: Dp, onToggle: () -> Unit, onClick: () -> Unit) {
-    val isDone = index in done
+private fun ReadingCard(plan: ReadingPlan, index: Int, state: PlansState, minHeight: Dp, onToggle: () -> Unit, onClick: () -> Unit) {
+    val readToday = java.time.LocalDate.now().toString() in state.activeDays
+    val away = state.done.isNotEmpty() && (state.lastReadAt?.let { daysSince(it) >= 3 } == true)
+    val streak = readingStreak(state.activeDays)
     Card(
         onClick = onClick,
         shape = RoundedCornerShape(20.dp),
@@ -546,39 +559,28 @@ private fun ReadingCard(plan: ReadingPlan, index: Int, done: Set<Int>, minHeight
             modifier = Modifier.fillMaxWidth().heightIn(min = minHeight).padding(horizontal = 20.dp, vertical = 16.dp),
             verticalArrangement = Arrangement.Center
         ) {
-            Text(stringResource(R.string.reading_today).uppercase(), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
-            if (index < 0) {
+            // "Welcome back" when the person has stopped for a few days: the plan waited for them.
+            Text(
+                stringResource(if (away) R.string.reading_welcome_back else R.string.reading_next).uppercase(),
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary
+            )
+            Text(plan.days[index], style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(
+                plan.title + "  \u00B7  " + stringResource(R.string.plans_day, index + 1),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
                 Text(
-                    stringResource(R.string.reading_starts, plan.startDate.toLocalDate().format(DateTimeFormatter.ofPattern("EEEE d MMMM", Locale.getDefault()))),
-                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp)
+                    stringResource(R.string.reading_progress_pct, state.done.size, plan.days.size, if (plan.days.isEmpty()) 0 else state.done.size * 100 / plan.days.size) +
+                        (if (readToday) "  \u00B7  " + stringResource(R.string.reading_read_today) else "") +
+                        (if (streak > 1) "  \u00B7  " + stringResource(R.string.reading_streak, streak) else ""),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.weight(1f)
                 )
-                Text(plan.title, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                Text(plan.days[index], style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
-                Text(
-                    plan.title + "  \u00B7  " + stringResource(R.string.plans_day, index + 1),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-                val streak = streakOf(done, index)
-                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                    Text(
-                        stringResource(R.string.reading_progress, done.size, plan.days.size) +
-                            if (streak > 1) "  \u00B7  " + stringResource(R.string.reading_streak, streak) else "",
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        modifier = Modifier.weight(1f)
-                    )
-                    if (isDone) {
-                        OutlinedButton(onClick = onToggle) {
-                            Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(18.dp))
-                            Spacer(Modifier.width(6.dp))
-                            Text(stringResource(R.string.reading_done))
-                        }
-                    } else {
-                        Button(onClick = onToggle) { Text(stringResource(R.string.reading_mark)) }
-                    }
-                }
+                Button(onClick = onToggle) { Text(stringResource(R.string.reading_mark)) }
             }
         }
     }

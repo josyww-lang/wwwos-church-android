@@ -36,11 +36,18 @@ import org.yourchurch.app.data.AuthViewModel
 /** Where the logo sits in the top card. The start screen's logo shrinks and flies to exactly this place when the app has loaded. */
 val HEADER_LOGO_SIZE = 60.dp
 val HEADER_LOGO_START = 6.dp
-/** The middle of the logo, measured down from the bottom of the status bar: 6 (top gap) + 35 (half of the 70 inside the card). */
-val HEADER_LOGO_CENTER_BELOW_STATUS_BAR = 41.dp
+/** The gap between the bottom of the status bar (where the icons of other apps' notifications are) and the logo row. */
+private val HEADER_TOP_PAD = 16.dp
 
-/** The header card is exactly this tall on every page, so nothing moves when you change tabs. */
-val HEADER_HEIGHT = 84.dp
+/** The middle of the logo, measured down from the bottom of the status bar: the top gap + 35 (half of the 70 inside the card). */
+val HEADER_LOGO_CENTER_BELOW_STATUS_BAR = HEADER_TOP_PAD + 35.dp
+
+/**
+ * The header card is exactly this tall on every page, so nothing moves when you change tabs: the top gap, the 70 for the
+ * logo row, 8, and (if wanted) some extra room under it.
+ */
+private val HEADER_EXTRA = 0.dp
+val HEADER_HEIGHT = HEADER_TOP_PAD + 70.dp + 8.dp + HEADER_EXTRA
 
 /** True inside the main screen, which draws the header card once, on top of the pages. */
 val LocalHeaderHosted = compositionLocalOf { false }
@@ -101,7 +108,7 @@ fun AppHeaderBar(
             .background(MaterialTheme.colorScheme.primaryContainer, shape)
             .statusBarsPadding()
             .height(HEADER_HEIGHT)
-            .padding(start = HEADER_LOGO_START, end = 2.dp, top = 6.dp, bottom = 8.dp),
+            .padding(start = HEADER_LOGO_START, end = 2.dp, top = HEADER_TOP_PAD, bottom = 8.dp + HEADER_EXTRA),
         verticalAlignment = Alignment.CenterVertically
     ) {
         Box(Modifier.clip(CircleShape).clickable(enabled = isAdmin) { showLogo = true }) {

@@ -49,6 +49,7 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -72,12 +73,15 @@ import org.yourchurch.app.data.ChatReadStore
 import org.yourchurch.app.data.ChatRoom
 import org.yourchurch.app.data.ChatViewModel
 import org.yourchurch.app.data.DirectoryMember
+import org.yourchurch.app.data.PresenceInfo
+import org.yourchurch.app.data.PresenceStore
 import org.yourchurch.app.data.displayName
 import org.yourchurch.app.data.otherName
 import org.yourchurch.app.data.otherUid
 import org.yourchurch.app.ui.common.AppHeader
 import org.yourchurch.app.ui.common.GroupAvatar
 import org.yourchurch.app.ui.common.PersonAvatar
+import org.yourchurch.app.ui.common.PresenceLine
 import org.yourchurch.app.ui.common.SkeletonCards
 import org.yourchurch.app.ui.community.SectionTabs
 
@@ -428,6 +432,10 @@ private fun GroupList(
         }
     }
 
+    // How active the people are (looked up when the People tab is open).
+    val presence by produceState(emptyMap<String, PresenceInfo>(), tab, people.size) {
+        if (tab == 2) value = runCatching { PresenceStore.fetch(people.map { it.uid }) }.getOrDefault(emptyMap())
+    }
     val groups = myRooms.filter { !it.direct }
     val directs = myRooms.filter { it.direct }
 
@@ -462,7 +470,7 @@ private fun GroupList(
                 }
                 val shown = people.filter { it.uid != uid && (query.isBlank() || it.name.contains(query, ignoreCase = true)) }
                 if (shown.isEmpty()) item { emptyNote(R.string.chat_people_empty, R.string.chat_people_empty_hint) }
-                items(shown, key = { "u" + it.uid }) { member -> PersonRow(member = member, onClick = { onPerson(member) }) }
+                items(shown, key = { "u" + it.uid }) { member -> PersonRow(member = member, presence = presence[member.uid], onClick = { onPerson(member) }) }
             }
         }
     }
@@ -470,7 +478,7 @@ private fun GroupList(
 
 /** One person in the People list: tap to open their card. */
 @Composable
-private fun PersonRow(member: DirectoryMember, onClick: () -> Unit) {
+private fun PersonRow(member: DirectoryMember, presence: PresenceInfo?, onClick: () -> Unit) {
     Column {
         Row(
             Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 4.dp, vertical = 12.dp),
@@ -478,26 +486,28 @@ private fun PersonRow(member: DirectoryMember, onClick: () -> Unit) {
         ) {
             PersonAvatar(uid = member.uid, name = member.name, size = 54.dp)
             Spacer(Modifier.width(14.dp))
-            Text(
-                member.name.ifBlank { "?" },
-                style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp),
-                fontWeight = FontWeight.SemiBold,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis,
-                modifier = Modifier.weight(1f)
-            )
+            Column(Modifier.weight(1f)) {
+                Text(
+                    member.name.ifBlank { "?" },
+                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp),
+                    fontWeight = FontWeight.SemiBold,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                PresenceLine(presence)
+            }
         }
         ListDivider()
     }
 }
 
-/** A thin line between two chats, starting after the picture (like WhatsApp). */
+/** A clear line under every chat (also under the last one), starting after the picture (like WhatsApp). */
 @Composable
 private fun ListDivider() {
     HorizontalDivider(
         modifier = Modifier.padding(start = 72.dp),
-        thickness = 0.5.dp,
-        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.6f)
+        thickness = 1.dp,
+        color = MaterialTheme.colorScheme.outline.copy(alpha = 0.9f)
     )
 }
 

@@ -138,6 +138,13 @@ private fun Typography.withFont(family: FontFamily) = copy(
 private val AppTypographyFont = AppTypography.withFont(AppFontFamily)
 
 /** One colour choice for the whole app: the main colour in light and dark, and the gradient behind headers. */
+/** The page colour a person chose in the dark look (with the sliders), or null for the automatic one. */
+fun chosenPageDark(): Color? = ThemeSettings.pageDarkColor.takeIf { it != 0 }?.let { Color(it) }
+
+/** The colour combination in use: the person's own (made with the sliders), or the one chosen (by them, or by the church). */
+fun currentAccent(): Accent =
+    if (ThemeSettings.usesCustom) accentFromColor(Color(ThemeSettings.customMain)) else ACCENTS[ThemeSettings.effectiveAccent]
+
 class Accent(
     val lightPrimary: Color,
     val lightContainer: Color,
@@ -268,7 +275,7 @@ fun isAppDark(): Boolean = when (ThemeSettings.mode) {
 @Composable
 fun ChurchTheme(content: @Composable () -> Unit) {
     val dark = isAppDark()
-    val accent = ACCENTS[ThemeSettings.effectiveAccent]
+    val accent = currentAccent()
     val scheme = if (dark) {
         DarkColors.copy(
             primary = accent.darkPrimary,
@@ -283,7 +290,7 @@ fun ChurchTheme(content: @Composable () -> Unit) {
             surfaceContainerHigh = lerp(DarkColors.surfaceContainerHigh, accent.darkContainer, 0.25f),
             surfaceContainerHighest = lerp(DarkColors.surfaceContainerHighest, accent.darkContainer, 0.25f),
             surfaceVariant = lerp(DarkColors.surfaceVariant, accent.darkContainer, 0.50f)
-        )
+        ).let { dark -> chosenPageDark()?.let { dark.copy(background = it) } ?: dark }
     } else {
         // As in the picture: a warm page, white cards with a thin outline, the palette's light colour for tiles.
         LightColors.copy(
@@ -294,7 +301,8 @@ fun ChurchTheme(content: @Composable () -> Unit) {
             secondary = accent.highlightText,
             secondaryContainer = accent.lightContainer,
             onSecondaryContainer = accent.onLightContainer,
-            background = accent.background,
+            // The page colour: the person's own choice, or the palette's. Only the pages change, not the top card or the bottom bar.
+            background = ThemeSettings.pageLightColor.takeIf { it != 0 }?.let { Color(it) } ?: accent.background,
             surface = Color.White,
             surfaceContainerLowest = Color.White,
             surfaceContainerLow = Color.White,
@@ -308,7 +316,10 @@ fun ChurchTheme(content: @Composable () -> Unit) {
     }
     // The "Text size" choice (Appearance) scales every text in the app.
     val context = LocalContext.current
-    remember { TextSize.load(context) }
+    remember(context) {
+        TextSize.load(context)
+        true
+    }
     val density = LocalDensity.current
     CompositionLocalProvider(
         LocalDensity provides Density(density.density, density.fontScale * TextSize.factor)
@@ -324,19 +335,19 @@ fun ChurchTheme(content: @Composable () -> Unit) {
 
 /** The palette's second colour (gold in Fjord and gold), for date tiles and small highlights. */
 @Composable
-fun highlightColor(): Color = ACCENTS[ThemeSettings.effectiveAccent].highlight
+fun highlightColor(): Color = currentAccent().highlight
 
 /** The same colour, readable as small text. */
 @Composable
 fun highlightTextColor(): Color {
-    val accent = ACCENTS[ThemeSettings.effectiveAccent]
+    val accent = currentAccent()
     return if (isAppDark()) lerp(accent.highlight, Color.White, 0.35f) else accent.highlightText
 }
 
 /** The gradient used behind the church name and the sign-in header. It follows the accent colour. */
 @Composable
 fun heroBrush(): Brush {
-    val accent = ACCENTS[ThemeSettings.effectiveAccent]
+    val accent = currentAccent()
     return Brush.linearGradient(if (isAppDark()) accent.heroDark else accent.heroLight)
 }
 

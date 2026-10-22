@@ -111,7 +111,7 @@ internal val CHURCH_KEYS = listOf("news", "events", "sermons", "serve", "pray")
 @Composable
 internal fun ChurchButtonGrid(selected: Int, badges: Map<String, Int>, onSelect: (Int) -> Unit) {
     Column(
-        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 17.dp, bottom = 8.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

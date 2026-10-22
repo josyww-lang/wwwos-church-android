@@ -123,7 +123,7 @@ fun MoreScreen(
                     "visitors" -> stringResource(R.string.visitors_title)
                     "about" -> stringResource(R.string.about_title)
                     "leaders" -> stringResource(R.string.roles_title)
-                    "verses" -> stringResource(R.string.verses_title)
+                    "bibles" -> stringResource(R.string.bibles_title)
                     else -> null  // the Give page has its own title
                 }
                 SubBar(title = title, onBack = { onRouteChange(null) })
@@ -139,7 +139,7 @@ fun MoreScreen(
                 "visitors" -> VisitorsPane()
                 "about" -> AboutPane(isAdmin = isAdmin)
                 "leaders" -> LeadersPane(isOwner = isOwner)
-                "verses" -> VerseBankPane()
+                "bibles" -> BibleCreditsPane()
                 else -> FeedbackPane(uid = uid, myName = myName, isAdmin = isAdmin)
             }
         }
@@ -159,7 +159,6 @@ fun MoreScreen(
                 if (isAdmin) MoreRow(Icons.Outlined.AdminPanelSettings, R.string.roles_title, ToneKind.Rose) { onRouteChange("leaders") }
                 if (isAdmin) MoreRow(Icons.Outlined.ManageAccounts, R.string.dashboard_title, ToneKind.Slate) { onRouteChange("dashboard") }
                 if (isAdmin) MoreRow(Icons.Outlined.Person, R.string.visitors_title, ToneKind.Rose) { onRouteChange("visitors") }
-                if (isAdmin) MoreRow(Icons.Outlined.MenuBook, R.string.verses_title, ToneKind.Purple) { onRouteChange("verses") }
                 if (isAdmin) MoreRow(Icons.Outlined.Videocam, R.string.live_settings, ToneKind.Coral) { showLive = true }
 
                 GroupLabel(R.string.more_group_settings)
@@ -182,6 +181,7 @@ fun MoreScreen(
 
                 GroupLabel(R.string.more_group_help)
                 MoreRow(Icons.Outlined.AutoAwesome, R.string.whatsnew_title, ToneKind.Gold) { showWhatsNew = true }
+                MoreRow(Icons.Outlined.MenuBook, R.string.bibles_title, ToneKind.Slate) { onRouteChange("bibles") }
                 MoreRow(Icons.Outlined.Notifications, R.string.notif_check_title, ToneKind.Slate) { showNotifCheck = true }
                 MoreRow(Icons.Outlined.Settings, R.string.cc_title, ToneKind.Slate) { showConnection = true }
 

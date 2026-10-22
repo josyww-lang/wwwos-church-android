@@ -1,5 +1,6 @@
 package org.yourchurch.app.ui.auth
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -50,8 +51,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
@@ -88,7 +87,10 @@ fun VisitorDialog(onDismiss: () -> Unit) {
     val emailBad = email.isNotBlank() && !email.contains('@')
     val canSend = name.isNotBlank() && !contactMissing && !emailBad && !sending
 
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    // Shown on top of the sign-in page in the same window (not as a separate dialog window), so the phone's bars and
+    // keyboard are handled like on every other page and the Send button at the bottom is never hidden.
+    BackHandler(onBack = onDismiss)
+    run {
         Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) {
             Column(Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding().imePadding()) {
                 Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {

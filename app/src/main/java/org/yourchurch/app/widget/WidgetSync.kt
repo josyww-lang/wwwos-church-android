@@ -31,6 +31,7 @@ object WidgetSync {
         name: String,
         labels: Triple<String, String, String>,
         plan: ReadingPlan?,
+        nextDay: Int,
         events: List<Event>,
         verse: String
     ) {
@@ -43,7 +44,8 @@ object WidgetSync {
         if (plan != null) {
             o.put(
                 "plan",
-                JSONObject().put("start", plan.startDate.toLocalDate().toEpochDay()).put("days", JSONArray(plan.days))
+                // "next" is this person's next reading (the first day they have not read), worked out by the app.
+                JSONObject().put("start", plan.startDate.toLocalDate().toEpochDay()).put("days", JSONArray(plan.days)).put("next", nextDay)
             )
         }
         val list = JSONArray()
@@ -71,7 +73,7 @@ object WidgetSync {
 
         var reading = ""
         o.optJSONObject("plan")?.let { plan ->
-            val index = (LocalDate.now().toEpochDay() - plan.optLong("start")).toInt()
+            val index = if (plan.has("next")) plan.optInt("next") else (LocalDate.now().toEpochDay() - plan.optLong("start")).toInt()
             val days = plan.optJSONArray("days")
             if (days != null && index >= 0 && index < days.length()) reading = days.optString(index)
         }

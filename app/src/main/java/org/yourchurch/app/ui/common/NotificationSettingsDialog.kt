@@ -50,6 +50,7 @@ fun NotificationSettingsDialog(uid: String, onCheckPhone: () -> Unit, onDismiss:
     var sermons by remember { mutableStateOf(NotificationPrefs.sermons) }
     var giving by remember { mutableStateOf(NotificationPrefs.giving) }
     var reminders by remember { mutableStateOf(NotificationPrefs.reminders) }
+    var verse by remember { mutableStateOf(NotificationPrefs.verse) }
     var masterOn by remember { mutableStateOf(Notifications.isEnabled(context)) }
     var quietOn by remember { mutableStateOf(NotificationPrefs.quietOn) }
     var quietFrom by remember { mutableStateOf(NotificationPrefs.quietFrom) }
@@ -74,6 +75,12 @@ fun NotificationSettingsDialog(uid: String, onCheckPhone: () -> Unit, onDismiss:
                 ToggleRow(stringResource(R.string.notif_type_reminders), reminders) { reminders = it }
                 ToggleRow(stringResource(R.string.notif_type_sermons), sermons) { sermons = it }
                 ToggleRow(stringResource(R.string.notif_type_giving), giving) { giving = it }
+                ToggleRow(stringResource(R.string.notif_type_verse), verse) { verse = it }
+                Text(
+                    stringResource(R.string.notif_type_verse_desc),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
                 ToggleRow(stringResource(R.string.notif_type_live), live) { live = it }
 
                 Spacer(Modifier.height(12.dp))
@@ -94,7 +101,7 @@ fun NotificationSettingsDialog(uid: String, onCheckPhone: () -> Unit, onDismiss:
         },
         confirmButton = {
             TextButton(onClick = {
-                NotificationPrefs.save(context, chat, announcements, events, live, sermons, giving, reminders, quietOn, quietFrom, quietTo)
+                NotificationPrefs.save(context, chat, announcements, events, live, sermons, giving, reminders, quietOn, quietFrom, quietTo, verse)
                 scope.launch { runCatching { NotificationPrefs.sync(uid) } }
                 onDismiss()
             }) { Text(stringResource(R.string.save)) }

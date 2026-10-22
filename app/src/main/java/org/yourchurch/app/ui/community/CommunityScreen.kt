@@ -108,7 +108,7 @@ internal fun SectionTabs(
     Row(
         modifier = Modifier
             .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 16.dp, vertical = 8.dp),
+            .padding(start = 16.dp, end = 16.dp, top = 17.dp, bottom = 8.dp),
         horizontalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         labels.forEachIndexed { i, label ->

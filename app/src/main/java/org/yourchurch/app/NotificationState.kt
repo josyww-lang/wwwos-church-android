@@ -25,3 +25,11 @@ object ChatUiState {
     @Volatile
     var openRoomId: String? = null
 }
+
+/** A place in the Bible to open in the reader: "PSA.89.1" (book, chapter, verse) in the language [lang] (or the reader's own language if null). */
+class ReaderRequest(val ref: String, val lang: String?)
+
+/** Set by the verse of the day, its notification, or My highlights, so the Study tab can open the Bible there. */
+object PendingReading {
+    var request: ReaderRequest? by mutableStateOf(null)
+}

@@ -1,5 +1,6 @@
 package org.yourchurch.app.ui.common
 
+import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -112,6 +113,7 @@ fun ProfilePhotoSection(uid: String, name: String) {
     val scope = rememberCoroutineScope()
     var working by remember { mutableStateOf(false) }
     var failed by remember { mutableStateOf(false) }
+    var cropSource by remember { mutableStateOf<Bitmap?>(null) }
 
     LaunchedEffect(uid) { AvatarStore.ensure(uid) }
     val hasPhoto = AvatarStore.bitmaps.containsKey(uid)
@@ -122,9 +124,10 @@ fun ProfilePhotoSection(uid: String, name: String) {
             working = true
             failed = false
             scope.launch {
-                val ok = AvatarStore.uploadFromUri(context, uid, uri)
+                // Load the photo, then let the person move and zoom it before it is saved.
+                val bitmap = AvatarStore.loadForCrop(context, uri)
                 working = false
-                failed = !ok
+                if (bitmap == null) failed = true else cropSource = bitmap
             }
         }
     }
@@ -173,8 +176,24 @@ fun ProfilePhotoSection(uid: String, name: String) {
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
     }
-}
 
+    cropSource?.let { source ->
+        PhotoCropDialog(
+            source = source,
+            onCancel = { cropSource = null },
+            onDone = { square ->
+                cropSource = null
+                working = true
+                failed = false
+                scope.launch {
+                    val ok = AvatarStore.uploadFromBitmap(uid, square)
+                    working = false
+                    failed = !ok
+                }
+            }
+        )
+    }
+}
 
 /** A profile picture, as big as the screen allows. Tap anywhere to close it. */
 @Composable

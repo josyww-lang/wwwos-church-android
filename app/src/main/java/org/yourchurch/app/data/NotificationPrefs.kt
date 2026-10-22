@@ -10,6 +10,7 @@ import com.google.firebase.firestore.SetOptions
 import java.util.TimeZone
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
+import org.yourchurch.app.LocaleManager
 
 /**
  * Which notifications this person wants, and their quiet hours at night.
@@ -32,6 +33,10 @@ object NotificationPrefs {
         private set
     var reminders by mutableStateOf(true)
         private set
+    /** The verse of the day as a notification every morning at 9:00 (on from the start; the person can switch it off). */
+    var verse by mutableStateOf(true)
+        private set
+    private var appContext: Context? = null
     var quietOn by mutableStateOf(false)
         private set
     /** Quiet hours, as whole hours of the day (0 to 23). */
@@ -42,6 +47,7 @@ object NotificationPrefs {
     private var loaded = false
 
     fun load(context: Context) {
+        appContext = context.applicationContext
         if (loaded) return
         val p = context.getSharedPreferences(FILE, Context.MODE_PRIVATE)
         chat = p.getBoolean("np_chat", true)
@@ -51,6 +57,7 @@ object NotificationPrefs {
         sermons = p.getBoolean("np_sermons", true)
         giving = p.getBoolean("np_giving", true)
         reminders = p.getBoolean("np_reminders", true)
+        verse = p.getBoolean("np_verse", true)
         quietOn = p.getBoolean("np_quiet_on", false)
         quietFrom = p.getInt("np_quiet_from", 22).coerceIn(0, 23)
         quietTo = p.getInt("np_quiet_to", 7).coerceIn(0, 23)
@@ -68,8 +75,11 @@ object NotificationPrefs {
         reminders: Boolean,
         quietOn: Boolean,
         quietFrom: Int,
-        quietTo: Int
+        quietTo: Int,
+        verse: Boolean = this.verse
     ) {
+        appContext = context.applicationContext
+        this.verse = verse
         this.chat = chat
         this.announcements = announcements
         this.events = events
@@ -84,8 +94,15 @@ object NotificationPrefs {
             .putBoolean("np_chat", chat).putBoolean("np_announcements", announcements)
             .putBoolean("np_events", events).putBoolean("np_live", live)
             .putBoolean("np_sermons", sermons).putBoolean("np_giving", giving).putBoolean("np_reminders", reminders)
-            .putBoolean("np_quiet_on", quietOn).putInt("np_quiet_from", this.quietFrom).putInt("np_quiet_to", this.quietTo)
+            .putBoolean("np_verse", verse).putBoolean("np_quiet_on", quietOn).putInt("np_quiet_from", this.quietFrom).putInt("np_quiet_to", this.quietTo)
             .apply()
+    }
+
+    /** The language of the app (en, nb or om), so the server can send the verse in it. */
+    private fun languageForServer(): String = when (appContext?.let { LocaleManager.languageCode(it) }) {
+        "nb", "nn", "no" -> "nb"
+        "om" -> "om"
+        else -> "en"
     }
 
     /** Tells the notification server these choices, and which time zone this phone is in. */
@@ -98,6 +115,8 @@ object NotificationPrefs {
             "sermons" to sermons,
             "giving" to giving,
             "eventReminders" to reminders,
+            "verse" to verse,
+            "lang" to languageForServer(),
             "quietOn" to quietOn,
             "quietFrom" to quietFrom,
             "quietTo" to quietTo

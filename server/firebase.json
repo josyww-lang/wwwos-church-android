@@ -17,6 +17,29 @@
       "firebase.json",
       "**/.*",
       "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "/api/bibleBooks",
+        "function": {
+          "functionId": "bibleBooks",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/bibleChapter",
+        "function": {
+          "functionId": "bibleChapter",
+          "region": "europe-west1"
+        }
+      },
+      {
+        "source": "/api/bibleSearch",
+        "function": {
+          "functionId": "bibleSearch",
+          "region": "europe-west1"
+        }
+      }
     ]
   }
 }

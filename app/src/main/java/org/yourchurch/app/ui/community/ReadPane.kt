@@ -51,7 +51,7 @@ import org.yourchurch.app.ui.common.SkeletonCards
  * Leaders add, change and remove them; everyone else just opens them.
  */
 @Composable
-fun ReadPane(uid: String, isAdmin: Boolean, vm: WordViewModel) {
+fun ReadPane(uid: String, isAdmin: Boolean, vm: WordViewModel, onOpenReader: () -> Unit = {}) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -67,6 +67,23 @@ fun ReadPane(uid: String, isAdmin: Boolean, vm: WordViewModel) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
         ) {
+            item {
+                WordCard(onClick = onOpenReader) {
+                    Row(Modifier.padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        WordIcon(Icons.Outlined.MenuBook)
+                        Spacer(Modifier.width(14.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(stringResource(R.string.reader_open), style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp))
+                            Text(
+                                stringResource(R.string.reader_open_hint),
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            }
             item {
                 Text(stringResource(R.string.word_bible_title), style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp))
                 Text(

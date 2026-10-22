@@ -121,17 +121,17 @@ fun LoadingLogo(
                     }
                 }
         ) { ChurchLogo(size = size) }
-        // The name sits close under the logo, and fades away first when the logo leaves.
+        // The name sits a little below the logo, and fades away first when the logo leaves.
         Box(
             Modifier
                 .align(Alignment.TopCenter)
-                .padding(top = logoTop + size + 6.dp)
+                .padding(top = logoTop + size + 40.dp)
                 .graphicsLayer { alpha = nameAlpha.value * (1f - exit.value * 2.5f).coerceIn(0f, 1f) }
         ) {
             ChurchName(
                 modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp),
                 color = colorResource(R.color.splash_text),
-                startSize = 22f
+                startSize = 29f
             )
         }
     }

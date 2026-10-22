@@ -150,6 +150,7 @@ fun EditProfileDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
                 ProfileFields(name, { name = it }, phone, { phone = it }, email = email)
+                ActivityStatusPicker()
                 if (onSignOut != null) {
                     TextButton(onClick = { confirmSignOut = true }) {
                         Text(stringResource(R.string.sign_out), color = MaterialTheme.colorScheme.error)

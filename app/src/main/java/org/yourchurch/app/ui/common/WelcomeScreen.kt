@@ -20,8 +20,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.outlined.Home
@@ -116,11 +118,11 @@ private fun LanguagePage() {
     val current = LocaleManager.languageCode(context)
     val options = listOf("en" to "English", "nb" to "Norsk", "om" to "Afaan Oromoo")
     Column(
-        modifier = Modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
-        ChurchLogo(size = 72.dp)
+        ChurchLogo(size = 128.dp)
         Spacer(Modifier.height(12.dp))
         ChurchName(textAlign = TextAlign.Center, startSize = 20f)
         Spacer(Modifier.height(28.dp))
