@@ -1,5 +1,9 @@
 package org.yourchurch.app.data
 
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.CoroutineScope
+import com.google.firebase.firestore.ListenerRegistration
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
@@ -37,24 +41,29 @@ object AvatarStore {
     private val checked = HashSet<String>()
     private val db get() = FirebaseFirestore.getInstance()
 
-    /** Loads this person's picture if we haven't looked yet this session. */
+    private val listeners = HashMap<String, ListenerRegistration>()
+    private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
+
+    /**
+     * Follows this person's picture (once per person per session): it is shown when it is loaded, and again whenever the person
+     * changes or removes it, so a new picture shows on every phone at once.
+     */
     suspend fun ensure(uid: String) {
-        if (uid.isEmpty() || uid in checked) return
-        checked.add(uid)
-        try {
-            val snapshot = withTimeout(15_000) { db.collection("avatars").document(uid).get().await() }
-            val bytes = snapshot.getBlob("photo")?.toBytes()
-            if (bytes != null) {
-                val bitmap = withContext(Dispatchers.Default) {
-                    BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
-                }
-                if (bitmap != null) bitmaps[uid] = bitmap
+        if (uid.isEmpty() || uid in listeners) return
+        listeners[uid] = db.collection("avatars").document(uid).addSnapshotListener { snapshot, error ->
+            if (error != null) {
+                listeners.remove(uid)?.remove()      // not allowed yet (not approved): ask again later
+                return@addSnapshotListener
             }
-        } catch (e: CancellationException) {
-            checked.remove(uid)
-            throw e
-        } catch (e: Exception) {
-            checked.remove(uid) // try again next time it's needed
+            val bytes = snapshot?.getBlob("photo")?.toBytes()
+            if (bytes == null) {
+                bitmaps.remove(uid)
+            } else {
+                scope.launch {
+                    val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                    if (bitmap != null) withContext(Dispatchers.Main) { bitmaps[uid] = bitmap }
+                }
+            }
         }
     }
 
@@ -95,8 +104,16 @@ object AvatarStore {
         false
     }
 
+    /** Starts following the pictures again (after this person was approved, the pictures are allowed). */
+    fun restart() {
+        listeners.values.forEach { it.remove() }
+        listeners.clear()
+    }
+
     /** Forget everything (used when someone signs out). */
     fun clear() {
+        listeners.values.forEach { it.remove() }
+        listeners.clear()
         bitmaps.clear()
         checked.clear()
     }

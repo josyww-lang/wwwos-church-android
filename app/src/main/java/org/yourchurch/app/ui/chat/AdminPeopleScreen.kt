@@ -2,6 +2,7 @@
 
 package org.yourchurch.app.ui.chat
 
+import org.yourchurch.app.ui.common.RoleBadge
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -211,6 +212,7 @@ private fun PersonCard(
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(person.name.ifBlank { "?" }, style = MaterialTheme.typography.titleMedium)
+                RoleBadge(person.uid)
                 if (AvatarStore.bitmaps.containsKey(person.uid)) {
                     val scope = rememberCoroutineScope()
                     TextButton(onClick = { scope.launch { AvatarStore.delete(person.uid) } }) {

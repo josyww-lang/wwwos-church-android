@@ -33,3 +33,18 @@ class ReaderRequest(val ref: String, val lang: String?)
 object PendingReading {
     var request: ReaderRequest? by mutableStateOf(null)
 }
+
+/** Set to open the leaders' list of people waiting for approval (in the Chat tab). */
+object ChatNav {
+    var openPeople: Boolean by mutableStateOf(false)
+}
+
+/** For leaders: how many people are waiting for approval (the red number stays until each one is approved or removed). */
+object PendingApprovals {
+    var count: Int by mutableStateOf(0)
+}
+
+/** Goes up by one when this person has just been approved: the parts of the app that need approval load again, at once. */
+object ApprovalWatcher {
+    var version: Int by mutableStateOf(0)
+}

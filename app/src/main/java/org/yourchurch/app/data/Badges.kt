@@ -52,14 +52,55 @@ class BadgesViewModel : ViewModel() {
     val state: StateFlow<Map<String, List<NewItem>>> = _state.asStateFlow()
     private val registrations = mutableListOf<ListenerRegistration>()
 
-    init {
+    init { startWatching() }
+
+    /** Starts the watching again (after this person was approved: what needs approval is now allowed). */
+    fun restart() {
+        registrations.forEach { it.remove() }
+        registrations.clear()
+        startWatching()
+    }
+
+    private fun startWatching() {
         watch("news", db.collection("announcements"), "authorId") { doc ->
             doc.getTimestamp("publishAt")?.toDate()?.after(Date()) != true   // not those still waiting for their time
         }
         watch("events", db.collection("events"), "createdBy")
         watch("sermons", db.collection("sermons"), "authorId") { doc -> doc.getBoolean("published") != false }
-        watch("serve", db.collection("servingSlots"), "")
+        watchMyServing()
         watch("pray", db.collection("prayers"), "authorId")
+    }
+
+    /** The "new" count of Serving: only the duties this person is on (not what other people were given). */
+    private fun watchMyServing() {
+        val uid = com.google.firebase.auth.FirebaseAuth.getInstance().currentUser?.uid ?: return
+        var mine = emptyList<NewItem>()
+        var open = emptyList<NewItem>()
+        fun publish() = _state.update { it + ("serve" to (mine + open).sortedByDescending { n -> n.createdAt }) }
+        fun itemsOf(snapshot: com.google.firebase.firestore.QuerySnapshot) = snapshot.documents.mapNotNull { doc ->
+            val at = doc.getTimestamp("createdAt")?.toDate()?.time ?: return@mapNotNull null
+            NewItem(at, "")
+        }
+        // The duties a leader gave this person and that they have not yet answered ("I'll be there" or "I can't make it"):
+        // each counts as new for as long as the answer is missing, however often they open the screen.
+        registrations += db.collection("servingSlots").whereArrayContains("volunteers", uid).limit(200)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+                val now = System.currentTimeMillis()
+                mine = snapshot.documents.filter { d ->
+                    d.getString("mode") == "assigned" && d.getBoolean("cancelled") != true &&
+                        (d.getTimestamp("start")?.toDate()?.time ?: 0L) >= now &&
+                        uid !in ((d.get("confirmed") as? List<*>) ?: emptyList<Any>()) &&
+                        uid !in ((d.get("cantMake") as? List<*>) ?: emptyList<Any>())
+                }.map { NewItem(Long.MAX_VALUE, "") }
+                publish()
+            }
+        // Duties people can sign up for count too.
+        registrations += db.collection("servingSlots").whereEqualTo("open", true).limit(60)
+            .addSnapshotListener { snapshot, error ->
+                if (error != null || snapshot == null) return@addSnapshotListener
+                open = itemsOf(snapshot); publish()
+            }
     }
 
     private fun watch(key: String, collection: CollectionReference, authorField: String, keep: (DocumentSnapshot) -> Boolean = { true }) {

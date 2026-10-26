@@ -1,5 +1,6 @@
 package org.yourchurch.app.ui.common
 
+import org.yourchurch.app.ApprovalWatcher
 import android.graphics.Bitmap
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
@@ -55,7 +56,7 @@ import org.yourchurch.app.data.AvatarStore
 @Composable
 fun PersonAvatar(uid: String, name: String, size: Dp, modifier: Modifier = Modifier, viewable: Boolean = false) {
     var showViewer by remember { mutableStateOf(false) }
-    LaunchedEffect(uid) { AvatarStore.ensure(uid) }
+    LaunchedEffect(uid, ApprovalWatcher.version) { AvatarStore.ensure(uid) }
     val bitmap = AvatarStore.bitmaps[uid]
     if (bitmap != null) {
         val image = remember(bitmap) { bitmap.asImageBitmap() }
@@ -86,7 +87,7 @@ fun PersonAvatar(uid: String, name: String, size: Dp, modifier: Modifier = Modif
 /** The icon in the top corner that opens the account menu: my picture if I have one. */
 @Composable
 fun AccountIcon(uid: String, description: String, size: Dp = 40.dp) {
-    LaunchedEffect(uid) { AvatarStore.ensure(uid) }
+    LaunchedEffect(uid, ApprovalWatcher.version) { AvatarStore.ensure(uid) }
     val bitmap = AvatarStore.bitmaps[uid]
     if (bitmap != null) {
         val image = remember(bitmap) { bitmap.asImageBitmap() }
@@ -115,7 +116,7 @@ fun ProfilePhotoSection(uid: String, name: String) {
     var failed by remember { mutableStateOf(false) }
     var cropSource by remember { mutableStateOf<Bitmap?>(null) }
 
-    LaunchedEffect(uid) { AvatarStore.ensure(uid) }
+    LaunchedEffect(uid, ApprovalWatcher.version) { AvatarStore.ensure(uid) }
     val hasPhoto = AvatarStore.bitmaps.containsKey(uid)
 
     // The system photo picker: no permission needed.

@@ -1,5 +1,13 @@
 package org.yourchurch.app.ui.community
 
+import org.yourchurch.app.ui.common.ChipFlow
+import androidx.compose.material3.AssistChip
+import kotlinx.coroutines.launch
+import com.google.firebase.auth.FirebaseAuth
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.platform.LocalClipboardManager
+import androidx.compose.runtime.rememberCoroutineScope
+import android.widget.Toast
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -51,6 +59,12 @@ private fun shortDate(date: Date): String = DateFormat.getDateInstance(DateForma
 fun LeadersPane(isOwner: Boolean, vm: LeadersAdminViewModel = viewModel(key = "leaders-admin")) {
     val rows by vm.rows.collectAsStateWithLifecycle()
     var editing by remember { mutableStateOf<LeaderRow?>(null) }
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val clipboard = LocalClipboardManager.current
+    val myUid = FirebaseAuth.getInstance().currentUser?.uid.orEmpty()
+    val savedText = stringResource(R.string.roles_saved)
+    val ownerOnlyText = stringResource(R.string.roles_err_owner)
 
     LazyColumn(
         contentPadding = PaddingValues(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 96.dp),
@@ -58,6 +72,16 @@ fun LeadersPane(isOwner: Boolean, vm: LeadersAdminViewModel = viewModel(key = "l
         modifier = Modifier.fillMaxSize()
     ) {
         item {
+            // Who you are here, so it is clear why something is allowed or not.
+            Text(
+                stringResource(if (isOwner) R.string.roles_you_owner else R.string.roles_you_leader),
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.primary
+            )
+            if (!isOwner) {
+                TextButton(onClick = { clipboard.setText(AnnotatedString(myUid)) }) { Text(stringResource(R.string.roles_copy_id)) }
+                InfoHint(stringResource(R.string.roles_become_owner, myUid), style = MaterialTheme.typography.bodyMedium)
+            }
             InfoHint(stringResource(R.string.roles_hint), modifier = Modifier.padding(bottom = 4.dp), style = MaterialTheme.typography.bodyMedium)
         }
         if (rows.isEmpty()) {
@@ -79,7 +103,12 @@ fun LeadersPane(isOwner: Boolean, vm: LeadersAdminViewModel = viewModel(key = "l
                         Text(
                             status,
                             style = MaterialTheme.typography.bodySmall,
-                            color = if (active || row.isContributor) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                            // A temporary leader (with an end date) has its own colour, so it is easy to tell from the others.
+                            color = when {
+                                active && row.until != null -> MaterialTheme.colorScheme.tertiary
+                                active || row.isContributor -> MaterialTheme.colorScheme.primary
+                                else -> MaterialTheme.colorScheme.onSurfaceVariant
+                            }
                         )
                     }
                 }
@@ -90,7 +119,20 @@ fun LeadersPane(isOwner: Boolean, vm: LeadersAdminViewModel = viewModel(key = "l
         RoleDialog(
             row = row,
             isOwner = isOwner,
-            onSave = { role, until -> vm.setRole(row, role, until); editing = null },
+            onSave = { role, until ->
+                editing = null
+                scope.launch {
+                    vm.setRole(row, role, until).fold(
+                        onSuccess = { Toast.makeText(context, savedText, Toast.LENGTH_SHORT).show() },
+                        onFailure = { e ->
+                            val denied = e is com.google.firebase.firestore.FirebaseFirestoreException &&
+                                e.code == com.google.firebase.firestore.FirebaseFirestoreException.Code.PERMISSION_DENIED
+                            val text = if (denied) ownerOnlyText else context.getString(R.string.roles_err_generic, e.message.orEmpty().take(80))
+                            Toast.makeText(context, text, Toast.LENGTH_LONG).show()
+                        }
+                    )
+                }
+            },
             onDismiss = { editing = null }
         )
     }
@@ -155,6 +197,11 @@ private fun RoleDialog(row: LeaderRow, isOwner: Boolean, onSave: (Int, Date?) ->
                             },
                             modifier = Modifier.fillMaxWidth()
                         ) { Text(shortDate(Date(endMillis))) }
+                        ChipFlow {
+                            AssistChip(onClick = { endMillis = System.currentTimeMillis() + 7L * 86_400_000L }, label = { Text(stringResource(R.string.leaders_preset_1w)) })
+                            AssistChip(onClick = { endMillis = System.currentTimeMillis() + 30L * 86_400_000L }, label = { Text(stringResource(R.string.leaders_preset_1m)) })
+                            AssistChip(onClick = { endMillis = System.currentTimeMillis() + 90L * 86_400_000L }, label = { Text(stringResource(R.string.leaders_preset_3m)) })
+                        }
                     }
                 }
             }

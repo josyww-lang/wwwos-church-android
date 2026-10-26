@@ -1,5 +1,7 @@
 package org.yourchurch.app.data
 
+import kotlinx.coroutines.Job
+import com.google.firebase.firestore.ListenerRegistration
 import android.content.Context
 import androidx.annotation.StringRes
 import androidx.lifecycle.ViewModel
@@ -38,6 +40,9 @@ enum class AuthError(@StringRes val messageRes: Int) {
     Generic(R.string.err_generic)
 }
 
+/** The state of "change my e-mail": working, the link was sent to [sentTo], or an error. */
+data class EmailChange(val working: Boolean = false, val sentTo: String? = null, val error: AuthError? = null)
+
 data class AuthState(
     val user: FirebaseUser? = null,
     /** True for leaders and for owners: the leader tools are shown. */
@@ -65,7 +70,14 @@ data class AuthState(
     val verifyWorking: Boolean = false,
     /** True after "I've verified" was tapped but Firebase still says not verified. */
     val verifyNotYet: Boolean = false,
-    val verifyError: AuthError? = null
+    val verifyError: AuthError? = null,
+    /** The end of a temporary leader's term (null for an owner, a leader with no end date, or a member). */
+    val leaderUntil: Date? = null,
+    /** 1: this person has just become a leader; 2: their leader access has just ended. Shown once, then cleared. */
+    val roleNotice: Int = 0,
+    val emailChange: EmailChange = EmailChange(),
+    /** Goes up when the e-mail was read again (so screens that show it refresh). */
+    val emailVersion: Int = 0
 )
 
 class AuthViewModel : ViewModel() {
@@ -79,9 +91,73 @@ class AuthViewModel : ViewModel() {
     private var pendingName: String? = null
     private var pendingPhone: String? = null
 
+    // ---------- Who is an owner or a leader: followed live, so a change reaches the person's phone at once ----------
+    private val roleRegistrations = mutableListOf<ListenerRegistration>()
+    private var roleTimer: Job? = null
+    private var gotOwner = false
+    private var gotLeader = false
+    private var ownerLive = false
+    private var leaderExists = false
+    private var leaderUntil: Date? = null
+    private var lastAdmin: Boolean? = null
+
+    private fun stopWatchingRole() {
+        roleRegistrations.forEach { it.remove() }
+        roleRegistrations.clear()
+        roleTimer?.cancel()
+        gotOwner = false; gotLeader = false; ownerLive = false; leaderExists = false; leaderUntil = null; lastAdmin = null
+    }
+
+    private fun watchRole(user: FirebaseUser) {
+        stopWatchingRole()
+        roleRegistrations += db.collection("admins").document(user.uid).addSnapshotListener { snap, error ->
+            if (error != null || snap == null) return@addSnapshotListener
+            ownerLive = snap.exists(); gotOwner = true; applyRole(user)
+        }
+        roleRegistrations += db.collection("leaders").document(user.uid).addSnapshotListener { snap, error ->
+            if (error != null || snap == null) return@addSnapshotListener
+            leaderExists = snap.exists(); leaderUntil = snap.getTimestamp("until")?.toDate(); gotLeader = true; applyRole(user)
+        }
+    }
+
+    private fun applyRole(user: FirebaseUser) {
+        if (!gotOwner || !gotLeader || auth.currentUser?.uid != user.uid) return
+        val until = leaderUntil
+        val leader = leaderExists && (until?.after(Date()) ?: true)
+        val admin = ownerLive || leader
+        // When a temporary leader's term ends, the leader tools go away at that moment (not at the next start of the app).
+        roleTimer?.cancel()
+        if (leaderExists && until != null && until.after(Date())) {
+            roleTimer = viewModelScope.launch {
+                delay((until.time - System.currentTimeMillis()).coerceAtLeast(0L) + 500L)
+                applyRole(user)
+            }
+        }
+        val before = lastAdmin ?: _state.value.isAdmin
+        lastAdmin = admin
+        FirebaseApp.getInstance().applicationContext.getSharedPreferences("settings", Context.MODE_PRIVATE).edit()
+            .putBoolean("auth_admin_${user.uid}", admin).putBoolean("auth_owner_${user.uid}", ownerLive).apply()
+        val notice = when {
+            !before && admin && !ownerLive -> 1
+            before && !admin -> 2
+            else -> 0
+        }
+        _state.update {
+            it.copy(
+                isAdmin = admin, isOwner = ownerLive, leaderUntil = if (!ownerLive && leader) until else null,
+                roleNotice = if (notice != 0) notice else it.roleNotice
+            )
+        }
+    }
+
+    fun clearRoleNotice() {
+        _state.update { it.copy(roleNotice = 0) }
+    }
+
     private val listener = FirebaseAuth.AuthStateListener { fa ->
         val user = fa.currentUser
         if (user == null) {
+            stopWatchingRole()
             AvatarStore.clear()
             _state.update {
                 it.copy(
@@ -92,6 +168,7 @@ class AuthViewModel : ViewModel() {
             }
         } else {
             _state.update { it.copy(user = user, emailVerified = user.isEmailVerified) }
+            watchRole(user)
             loadProfile(user)
         }
     }
@@ -247,6 +324,57 @@ class AuthViewModel : ViewModel() {
                 _state.update { it.copy(working = false, resetSent = true) }
             } catch (e: Exception) {
                 _state.update { it.copy(working = false, error = classify(e)) }
+            }
+        }
+    }
+
+    /**
+     * Change my e-mail. The person types the new address and their password (to show it is them); a confirmation link is sent
+     * to the NEW address, and the e-mail changes only when they open it. Until then nothing changes.
+     */
+    fun changeEmail(newEmail: String, password: String) {
+        val user = auth.currentUser ?: return
+        val current = user.email.orEmpty()
+        val target = newEmail.trim()
+        if (target.isEmpty() || !android.util.Patterns.EMAIL_ADDRESS.matcher(target).matches() || target.equals(current, ignoreCase = true)) {
+            _state.update { it.copy(emailChange = EmailChange(error = AuthError.InvalidEmail)) }
+            return
+        }
+        viewModelScope.launch {
+            _state.update { it.copy(emailChange = EmailChange(working = true)) }
+            try {
+                withTimeout(25_000) {
+                    user.reauthenticate(EmailAuthProvider.getCredential(current, password)).await()
+                    user.verifyBeforeUpdateEmail(target).await()
+                }
+                _state.update { it.copy(emailChange = EmailChange(sentTo = target)) }
+            } catch (e: Exception) {
+                _state.update { it.copy(emailChange = EmailChange(error = classify(e))) }
+            }
+        }
+    }
+
+    fun clearEmailChange() {
+        _state.update { it.copy(emailChange = EmailChange()) }
+    }
+
+    /** After the person opened the link: the new e-mail is read again and copied into their profile (the leaders see it too). */
+    fun syncEmail() {
+        val user = auth.currentUser ?: return
+        viewModelScope.launch {
+            runCatching {
+                withTimeout(15_000) { user.reload().await() }
+                val email = auth.currentUser?.email.orEmpty()
+                if (email.isNotEmpty()) {
+                    val doc = db.collection("users").document(user.uid)
+                    val stored = withTimeout(15_000) { doc.get().await() }.getString("email").orEmpty()
+                    if (stored != email) {
+                        withTimeout(15_000) {
+                            doc.set(mapOf("email" to email, "updatedAt" to FieldValue.serverTimestamp()), SetOptions.merge()).await()
+                        }
+                    }
+                    _state.update { it.copy(emailVersion = it.emailVersion + 1) }
+                }
             }
         }
     }

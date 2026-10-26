@@ -2,6 +2,8 @@
 
 package org.yourchurch.app.ui.community
 
+import org.yourchurch.app.ui.common.SegmentedChoice
+import org.yourchurch.app.ui.common.ChipFlow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.Arrangement
@@ -306,22 +308,16 @@ private fun EventDetail(
 
             // Will you come?
             Text(stringResource(R.string.event_rsvp_title), style = MaterialTheme.typography.titleMedium)
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                listOf(
-                    "going" to R.string.event_going,
-                    "maybe" to R.string.event_maybe,
-                    "no" to R.string.event_not_going
-                ).forEach { (status, label) ->
-                    FilterChip(
-                        selected = mine == status,
-                        onClick = {
-                            if (mine == status) vm.clearRsvp(event.id, uid)
-                            else vm.setRsvp(event.id, uid, myName, status)
-                        },
-                        label = { Text(stringResource(label)) }
-                    )
-                }
-            }
+            val rsvp = listOf("going" to R.string.event_going, "maybe" to R.string.event_maybe, "no" to R.string.event_not_going)
+            SegmentedChoice(
+                options = rsvp.map { stringResource(it.second) },
+                selected = rsvp.indexOfFirst { it.first == mine },
+                onSelect = { i ->
+                    val status = rsvp[i].first
+                    if (mine == status) vm.clearRsvp(event.id, uid) else vm.setRsvp(event.id, uid, myName, status)
+                },
+                modifier = Modifier.fillMaxWidth()
+            )
 
             Text(
                 stringResource(R.string.event_going_count, going.size) + "   ·   " +

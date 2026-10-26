@@ -2,6 +2,11 @@
 
 package org.yourchurch.app.ui.chat
 
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Badge
+import org.yourchurch.app.ChatNav
 import android.widget.Toast
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
@@ -110,6 +115,13 @@ fun ChatScreen(
     var pendingDelete by remember { mutableStateOf<ChatRoom?>(null) }
     var pendingLeave by remember { mutableStateOf<ChatRoom?>(null) }
 
+    // Asked from elsewhere ("Approve people" in More, a notification): open the list of people waiting for approval.
+    LaunchedEffect(ChatNav.openPeople) {
+        if (ChatNav.openPeople) {
+            ChatNav.openPeople = false
+            if (isAdmin) route = "admin"
+        }
+    }
     LaunchedEffect(route) {
         onFullScreen(route != "list")
         if (route == "list") readTick++
@@ -322,11 +334,40 @@ fun ChatScreen(
                             // Leaders: approve people and manage the chat.
                             if (isAdmin) {
                                 IconButton(onClick = { route = "admin" }) {
-                                    Icon(
-                                        Icons.Outlined.ManageAccounts,
-                                        contentDescription = stringResource(R.string.chat_admin_open),
-                                        modifier = Modifier.size(28.dp),
-                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    BadgedBox(badge = {
+                                        val waitingNow = state.people.count { !it.approved }
+                                        if (waitingNow > 0) Badge { Text(if (waitingNow > 9) "9+" else waitingNow.toString()) }
+                                    }) {
+                                        Icon(
+                                            Icons.Outlined.ManageAccounts,
+                                            contentDescription = stringResource(R.string.chat_admin_open),
+                                            modifier = Modifier.size(28.dp),
+                                            tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                        // Leaders: a clear banner while someone waits for approval (it stays until they are approved or removed).
+                        val waitingPeople = if (isAdmin) state.people.count { !it.approved } else 0
+                        if (waitingPeople > 0) {
+                            Card(
+                                onClick = { route = "admin" },
+                                shape = RoundedCornerShape(14.dp),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.errorContainer),
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp)
+                            ) {
+                                Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        stringResource(R.string.approve_banner, waitingPeople),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.onErrorContainer,
+                                        modifier = Modifier.weight(1f)
+                                    )
+                                    Text(
+                                        stringResource(R.string.approve_open),
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = MaterialTheme.colorScheme.onErrorContainer
                                     )
                                 }
                             }

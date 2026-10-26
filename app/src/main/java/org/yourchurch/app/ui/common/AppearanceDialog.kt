@@ -151,7 +151,7 @@ fun AppearanceDialog(onDismiss: () -> Unit, isAdmin: Boolean = false) {
             Section(stringResource(R.string.accent_title)) {
                 if (isAdmin) {
                     // Leaders choose the colours for the whole church, or just for themselves.
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    ChipFlow() {
                         FilterChip(selected = !forChurch, onClick = { forChurch = false }, label = { Text(stringResource(R.string.appearance_for_me)) })
                         FilterChip(selected = forChurch, onClick = { forChurch = true }, label = { Text(stringResource(R.string.appearance_for_church)) })
                     }

@@ -50,7 +50,10 @@ import org.yourchurch.app.data.ChurchInfoViewModel
 fun AccountMenu(
     auth: AuthState,
     onSaveProfile: (String, String) -> Unit,
-    onSignOut: () -> Unit
+    onSignOut: () -> Unit,
+    onChangeEmail: (String, String) -> Unit = { _, _ -> },
+    onClearEmailChange: () -> Unit = {},
+    onSyncEmail: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val infoVm: ChurchInfoViewModel = viewModel(key = "church-account")
@@ -76,11 +79,16 @@ fun AccountMenu(
             uid = uid,
             name = auth.displayName,
             email = auth.user?.email.orEmpty(),
+            isOwner = auth.isOwner,
+            isLeader = auth.isAdmin && !auth.isOwner,
+            leaderUntil = auth.leaderUntil,
             onEdit = { showMenu = false; showEdit = true },
             onSignOut = { showMenu = false; confirmSignOut = true },
             onDismiss = { showMenu = false }
         )
     }
+    // The e-mail is read again when the profile is opened (it may have been changed from the link).
+    LaunchedEffect(showEdit) { if (showEdit) onSyncEmail() }
     if (showEdit) {
         EditProfileDialog(
             uid = uid,
@@ -88,7 +96,10 @@ fun AccountMenu(
             initialPhone = auth.phone,
             email = auth.user?.email.orEmpty(),
             onSave = onSaveProfile,
-            onDismiss = { showEdit = false }
+            onDismiss = { showEdit = false },
+            emailChange = auth.emailChange,
+            onChangeEmail = onChangeEmail,
+            onEmailDialogClosed = onClearEmailChange
         )
     }
     if (confirmSignOut) {
@@ -108,6 +119,9 @@ private fun ProfileMenuDialog(
     uid: String,
     name: String,
     email: String,
+    isOwner: Boolean,
+    isLeader: Boolean,
+    leaderUntil: java.util.Date?,
     onEdit: () -> Unit,
     onSignOut: () -> Unit,
     onDismiss: () -> Unit
@@ -120,7 +134,11 @@ private fun ProfileMenuDialog(
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(bottom = 8.dp)) {
                     PersonAvatar(uid = uid, name = name, size = 72.dp, viewable = true)
                     Spacer(Modifier.width(16.dp))
-                    Text(email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Column {
+                        Text(email, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        // Your own role: Owner, Leader, or "Leader until ..." when it is temporary.
+                        MyRoleBadge(isOwner, isLeader, leaderUntil, Modifier.padding(top = 4.dp))
+                    }
                 }
                 ProfileMenuRow(Icons.Outlined.Edit, stringResource(R.string.profile_edit_profile), onClick = onEdit)
                 ProfileMenuRow(Icons.AutoMirrored.Filled.ExitToApp, stringResource(R.string.sign_out), MaterialTheme.colorScheme.error, onSignOut)

@@ -203,12 +203,7 @@ fun PlansPane(
                             }
                         }
                         AnimatedVisibility(visible = showInfo) {
-                            Text(
-                                stringResource(R.string.plans_self_paced_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = onColor.copy(alpha = 0.9f),
-                                modifier = Modifier.padding(end = 8.dp)
-                            )
+                            InfoHint(stringResource(R.string.plans_self_paced_hint))
                         }
                         if (finished) {
                             Text(

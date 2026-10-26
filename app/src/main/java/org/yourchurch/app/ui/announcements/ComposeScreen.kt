@@ -2,6 +2,7 @@
 
 package org.yourchurch.app.ui.announcements
 
+import org.yourchurch.app.ui.common.ChipFlow
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -139,10 +140,7 @@ fun ComposeScreen(
             )
 
             Text(stringResource(R.string.field_type), style = MaterialTheme.typography.labelLarge)
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            ChipFlow() {
                 Category.entries.forEach { c ->
                     FilterChip(
                         selected = category == c.id,

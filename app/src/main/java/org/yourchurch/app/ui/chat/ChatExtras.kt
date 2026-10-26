@@ -1,5 +1,6 @@
 package org.yourchurch.app.ui.chat
 
+import org.yourchurch.app.data.NameDirectory
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -159,7 +160,7 @@ fun ChatSearchDialog(messages: List<ChatMessage>, onPick: (String) -> Unit, onDi
                     items(results, key = { it.id }) { m ->
                         Column(Modifier.fillMaxWidth().clickable { onPick(m.id) }.padding(vertical = 2.dp)) {
                             val time = m.createdAt?.let { DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT, Locale.getDefault()).format(it) }.orEmpty()
-                            Text(m.senderName + "  \u00B7  " + time, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(NameDirectory.nameOf(m.senderId, m.senderName) + "  \u00B7  " + time, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text(snippetOf(m.text, q), style = MaterialTheme.typography.bodyMedium, maxLines = 3, overflow = TextOverflow.Ellipsis)
                         }
                     }

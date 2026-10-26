@@ -177,11 +177,7 @@ fun VisitorDialog(onDismiss: () -> Unit) {
                             verticalArrangement = Arrangement.spacedBy(6.dp)
                         ) {
                             if (!canSend && !sending) {
-                                Text(
-                                    stringResource(R.string.visitor_send_hint),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                InfoHint(stringResource(R.string.visitor_send_hint))
                             }
                             Button(
                                 enabled = canSend,

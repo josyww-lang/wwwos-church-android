@@ -143,7 +143,8 @@ fun HomePane(
     val announcements = announcementsVm.state.collectAsStateWithLifecycle().value
     // The next duty of this person (assigned by a leader, or signed up for) in the next two weeks, unless they said they cannot come.
     val serving = servingVm.state.collectAsStateWithLifecycle().value
-    val nextServing = serving.slots.firstOrNull { uid in it.volunteers && uid !in it.cantMake && it.start.time - System.currentTimeMillis() < 14L * 24 * 3600 * 1000 }
+    LaunchedEffect(uid, isAdmin) { servingVm.start(uid, isAdmin) }
+    val nextServing = serving.slots.firstOrNull { uid in it.volunteers && uid !in it.cantMake && !it.cancelled && it.start.time - System.currentTimeMillis() < 14L * 24 * 3600 * 1000 }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { announcementsVm.start() }
     LaunchedEffect(Unit) { Favorites.load(context) }
 

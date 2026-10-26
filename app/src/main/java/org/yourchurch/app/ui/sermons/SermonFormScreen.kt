@@ -2,6 +2,7 @@
 
 package org.yourchurch.app.ui.sermons
 
+import org.yourchurch.app.ui.common.ChipFlow
 import android.content.Context
 import android.net.Uri
 import android.provider.OpenableColumns
@@ -217,10 +218,7 @@ fun SermonFormScreen(
             )
 
             Text(stringResource(R.string.sermon_field_language), style = MaterialTheme.typography.labelLarge)
-            Row(
-                modifier = Modifier.horizontalScroll(rememberScrollState()),
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
+            ChipFlow() {
                 SERMON_LANGUAGES.forEach { code ->
                     FilterChip(
                         selected = language == code,

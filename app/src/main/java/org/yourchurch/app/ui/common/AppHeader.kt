@@ -37,7 +37,7 @@ import org.yourchurch.app.data.AuthViewModel
 val HEADER_LOGO_SIZE = 60.dp
 val HEADER_LOGO_START = 6.dp
 /** The gap between the bottom of the status bar (where the icons of other apps' notifications are) and the logo row. */
-private val HEADER_TOP_PAD = 16.dp
+private val HEADER_TOP_PAD = 7.dp
 
 /** The middle of the logo, measured down from the bottom of the status bar: the top gap + 35 (half of the 70 inside the card). */
 val HEADER_LOGO_CENTER_BELOW_STATUS_BAR = HEADER_TOP_PAD + 35.dp

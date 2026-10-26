@@ -1,5 +1,11 @@
 package org.yourchurch.app.ui.community
 
+import org.yourchurch.app.PendingTarget
+import org.yourchurch.app.PendingApprovals
+import androidx.compose.material3.Badge
+import androidx.compose.material.icons.outlined.HowToReg
+import org.yourchurch.app.data.ChurchInfoViewModel
+import androidx.compose.material.icons.outlined.QrCode2
 import android.content.Intent
 import android.net.Uri
 import androidx.activity.compose.BackHandler
@@ -106,6 +112,9 @@ fun MoreScreen(
     var showNotifSettings by remember { mutableStateOf(false) }
     var showConnection by remember { mutableStateOf(false) }
     var showLive by remember { mutableStateOf(false) }
+    var showInvite by remember { mutableStateOf(false) }
+    // The download link the leaders keep in the church's contact settings: the QR code is made from it.
+    val appLink = viewModel<ChurchInfoViewModel>(key = "church-$uid").state.collectAsStateWithLifecycle().value.info.appLink
     var showWhatsNew by remember { mutableStateOf(false) }
     var showDelete by remember { mutableStateOf(false) }
     var receiptsOn by remember { mutableStateOf(ReadReceipts.isEnabled(context)) }
@@ -155,6 +164,8 @@ fun MoreScreen(
                 MoreRow(Icons.Outlined.Search, R.string.search_title, ToneKind.Blue) { SearchUi.visible = true }
                 MoreRow(Icons.Outlined.Info, R.string.about_title, ToneKind.Teal) { onRouteChange("about") }
                 MoreRow(Icons.Outlined.Directions, R.string.section_contact, ToneKind.Blue) { onRouteChange("contact") }
+                if (isAdmin) MoreRow(Icons.Outlined.HowToReg, R.string.approve_people, ToneKind.Rose, badge = PendingApprovals.count) { PendingTarget.target = "people" }
+                MoreRow(Icons.Outlined.QrCode2, R.string.invite_title, ToneKind.Green) { showInvite = true }
                 MoreRow(Icons.Outlined.CardGiftcard, R.string.tab_give, ToneKind.Gold) { onRouteChange("give") }
                 MoreRow(Icons.Outlined.ChatBubbleOutline, R.string.section_feedback, ToneKind.Teal) { onRouteChange("feedback") }
                 if (isAdmin) MoreRow(Icons.Outlined.AdminPanelSettings, R.string.roles_title, ToneKind.Rose) { onRouteChange("leaders") }
@@ -197,6 +208,7 @@ fun MoreScreen(
     if (showLanguage) LanguageDialog(onDismiss = { showLanguage = false })
     if (showConnection) ConnectionCheckDialog(onDismiss = { showConnection = false })
     if (showWhatsNew) WhatsNewDialog(onDismiss = { showWhatsNew = false })
+    if (showInvite) InviteDialog(link = appLink, isAdmin = isAdmin, onClose = { showInvite = false })
     if (showLive) LiveSettingsDialog(info = liveInfo, vm = liveVm, onDismiss = { showLive = false })
     if (showDelete) {
         DeleteAccountDialog(
@@ -227,7 +239,7 @@ private fun GroupLabel(@StringRes text: Int) {
 }
 
 @Composable
-private fun MoreRow(icon: ImageVector, @StringRes label: Int, kind: ToneKind, danger: Boolean = false, onClick: () -> Unit) {
+private fun MoreRow(icon: ImageVector, @StringRes label: Int, kind: ToneKind, danger: Boolean = false, badge: Int = 0, onClick: () -> Unit) {
     val colors = tone(kind)
     val tint = if (danger) MaterialTheme.colorScheme.error else colors.accent
     Card(
@@ -252,6 +264,10 @@ private fun MoreRow(icon: ImageVector, @StringRes label: Int, kind: ToneKind, da
                 color = if (danger) MaterialTheme.colorScheme.error else Color.Unspecified,
                 modifier = Modifier.weight(1f)
             )
+            if (badge > 0) {
+                Badge { Text(if (badge > 9) "9+" else badge.toString()) }
+                Spacer(Modifier.width(8.dp))
+            }
             Icon(
                 Icons.AutoMirrored.Filled.KeyboardArrowRight,
                 contentDescription = null,

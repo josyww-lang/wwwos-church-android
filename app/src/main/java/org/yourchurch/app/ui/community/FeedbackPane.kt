@@ -1,5 +1,6 @@
 package org.yourchurch.app.ui.community
 
+import org.yourchurch.app.ui.common.ChipFlow
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -87,7 +88,7 @@ private fun FeedbackForm(uid: String, myName: String, vm: FeedbackViewModel) {
         Text(stringResource(R.string.fb_title), style = MaterialTheme.typography.headlineSmall)
         InfoHint(stringResource(R.string.fb_intro), style = MaterialTheme.typography.bodyMedium)
 
-        Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        ChipFlow() {
             FEEDBACK_CATEGORIES.forEach { code ->
                 FilterChip(
                     selected = category == code,

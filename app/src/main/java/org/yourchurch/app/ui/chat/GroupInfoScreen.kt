@@ -2,6 +2,7 @@
 
 package org.yourchurch.app.ui.chat
 
+import org.yourchurch.app.ui.common.RoleBadge
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
@@ -132,6 +133,7 @@ fun GroupInfoScreen(
                         Spacer(Modifier.width(12.dp))
                         Column(Modifier.weight(1f)) {
                             Text(room.memberNames[memberUid]?.ifBlank { "?" } ?: "?")
+                            RoleBadge(memberUid)
                             if (memberUid == room.createdBy) {
                                 Text(
                                     stringResource(R.string.chat_owner),

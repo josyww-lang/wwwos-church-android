@@ -2,6 +2,7 @@
 
 package org.yourchurch.app.ui.sermons
 
+import org.yourchurch.app.data.NameDirectory
 import android.content.Intent
 import android.net.Uri
 import android.text.format.DateUtils
@@ -310,12 +311,12 @@ private fun CommentRow(
 ) {
     val liked = myUid in comment.likes
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.Top) {
-        PersonAvatar(uid = comment.authorId, name = comment.authorName, size = 36.dp)
+        PersonAvatar(uid = comment.authorId, name = NameDirectory.nameOf(comment.authorId, comment.authorName), size = 36.dp)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(
-                    comment.authorName.ifBlank { "?" },
+                    NameDirectory.nameOf(comment.authorId, comment.authorName).ifBlank { "?" },
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium
                 )

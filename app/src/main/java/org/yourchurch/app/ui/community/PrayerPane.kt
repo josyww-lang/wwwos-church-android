@@ -2,6 +2,7 @@
 
 package org.yourchurch.app.ui.community
 
+import org.yourchurch.app.data.NameDirectory
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
@@ -185,13 +186,13 @@ private fun PrayerCard(prayer: Prayer, uid: String, isAdmin: Boolean, vm: Prayer
                         contentAlignment = Alignment.Center
                     ) { Text("?", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 } else {
-                    PersonAvatar(uid = prayer.authorId, name = prayer.authorName, size = 36.dp)
+                    PersonAvatar(uid = prayer.authorId, name = NameDirectory.nameOf(prayer.authorId, prayer.authorName), size = 36.dp)
                 }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     val name = if (hidden) {
                         stringResource(R.string.prayer_someone) + if (mine) " (${stringResource(R.string.chat_you)})" else ""
-                    } else prayer.authorName
+                    } else NameDirectory.nameOf(prayer.authorId, prayer.authorName)
                     Text(name, style = MaterialTheme.typography.titleSmall)
                     Text(
                         formatWhen(prayer.createdAt),

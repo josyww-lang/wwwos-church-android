@@ -1,5 +1,7 @@
 package org.yourchurch.app.ui.community
 
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
@@ -95,7 +97,8 @@ internal fun HubHeader(accountMenu: @Composable () -> Unit) {
     AppHeader(accountMenu = accountMenu)
 }
 
-/** The section buttons under the title. They scroll sideways if they don't all fit. */
+/** The section buttons under the title. If they don't all fit in one row, they go onto a second row (nothing is hidden beyond the edge). */
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 internal fun SectionTabs(
     labels: List<String>,
@@ -105,11 +108,10 @@ internal fun SectionTabs(
     large: Boolean = false,
     onSelect: (Int) -> Unit
 ) {
-    Row(
-        modifier = Modifier
-            .horizontalScroll(rememberScrollState())
-            .padding(start = 16.dp, end = 16.dp, top = 17.dp, bottom = 8.dp),
-        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    FlowRow(
+        modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 17.dp, bottom = 8.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         labels.forEachIndexed { i, label ->
             val isSelected = i == selected

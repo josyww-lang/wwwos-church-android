@@ -1,5 +1,8 @@
 package org.yourchurch.app.data
 
+import org.yourchurch.app.ApprovalWatcher
+import kotlinx.coroutines.flow.drop
+import androidx.compose.runtime.snapshotFlow
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
@@ -45,8 +48,19 @@ class SermonsViewModel : ViewModel() {
 
     // ---------- Comments on the open sermon ----------
 
+    init {
+        // When this person has just been approved, the comments of the open sermon are loaded again.
+        viewModelScope.launch {
+            snapshotFlow { ApprovalWatcher.version }.drop(1).collect {
+                val open = commentsFor
+                commentsFor = null
+                if (open != null) openComments(open)
+            }
+        }
+    }
+
     fun openComments(sermonId: String) {
-        if (commentsFor == sermonId) return
+        if (commentsFor == sermonId && !_state.value.commentsDenied) return
         commentsFor = sermonId
         commentsJob?.cancel()
         _state.update { it.copy(comments = emptyList(), commentsLoading = true, commentsDenied = false) }

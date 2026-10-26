@@ -56,32 +56,34 @@ class LeadersAdminViewModel : ViewModel() {
     }
 
     /** Sets what this person can do: 0 member, 1 study contributor, 2 leader ([until] is the end of the term, or null). */
-    fun setRole(row: LeaderRow, role: Int, until: Date?) {
-        viewModelScope.launch {
-            val leaderDoc = db.collection("leaders").document(row.uid)
-            val contributorDoc = db.collection("contributors").document(row.uid)
-            runCatching {
-                when (role) {
-                    2 -> {
-                        val data = hashMapOf<String, Any>(
-                            "name" to row.name.take(60),
-                            "grantedBy" to FirebaseAuth.getInstance().currentUser?.uid.orEmpty(),
-                            "grantedAt" to Timestamp.now()
-                        )
-                        if (until != null) data["until"] = Timestamp(until)
-                        leaderDoc.set(data).await()
-                        runCatching { contributorDoc.delete().await() }   // a leader can do all of it already
-                    }
-                    1 -> {
-                        contributorDoc.set(mapOf("name" to row.name.take(60), "grantedAt" to Timestamp.now())).await()
-                        if (row.isLeader) runCatching { leaderDoc.delete().await() }
-                    }
-                    else -> {
-                        runCatching { contributorDoc.delete().await() }
-                        if (row.isLeader) runCatching { leaderDoc.delete().await() }
-                    }
+    suspend fun setRole(row: LeaderRow, role: Int, until: Date?): Result<Unit> {
+        val leaderDoc = db.collection("leaders").document(row.uid)
+        val contributorDoc = db.collection("contributors").document(row.uid)
+        return runCatching {
+            // All the changes in one write (one trip to the server), so the role changes at once and either all of it happens or none.
+            val batch = db.batch()
+            when (role) {
+                2 -> {
+                    val data = hashMapOf<String, Any>(
+                        "name" to row.name.take(60),
+                        "grantedBy" to FirebaseAuth.getInstance().currentUser?.uid.orEmpty(),
+                        "grantedAt" to Timestamp.now()
+                    )
+                    if (until != null) data["until"] = Timestamp(until)
+                    batch.set(leaderDoc, data)
+                    batch.delete(contributorDoc)       // a leader can do all of it already
+                }
+                1 -> {
+                    batch.set(contributorDoc, mapOf("name" to row.name.take(60), "grantedAt" to Timestamp.now()))
+                    if (row.isLeader) batch.delete(leaderDoc)
+                }
+                else -> {
+                    batch.delete(contributorDoc)
+                    if (row.isLeader) batch.delete(leaderDoc)
                 }
             }
+            kotlinx.coroutines.withTimeout(20_000) { batch.commit().await() }
+            Unit
         }
     }
 

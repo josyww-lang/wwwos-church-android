@@ -1,5 +1,6 @@
 package org.yourchurch.app.ui.community
 
+import org.yourchurch.app.ui.common.InfoHint
 import android.Manifest
 import android.content.Context
 import android.content.Intent
@@ -225,12 +226,7 @@ fun LibraryPane(uid: String, isAdmin: Boolean, canAdd: Boolean, vm: WordViewMode
                         if (isAdmin && folder != null) LeaderMenu(onEdit = { renameFolder = folder }, onDelete = { deleteFolder = folder })
                     }
                     if (showHint && folder == null && !inOther) {
-                        Text(
-                            stringResource(R.string.word_study_hint),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 4.dp)
-                        )
+                        InfoHint(stringResource(R.string.word_study_hint))
                     }
                 }
             }

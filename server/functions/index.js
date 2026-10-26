@@ -1021,6 +1021,18 @@ exports.addApprovedToOpenGroups = onDocumentCreated(
       count++;
     });
     if (count > 0) await batch.commit();
+    // Tell the person: chat, prayers and comments are open now.
+    try {
+      const entries = await tokensFor([uid]);
+      if (entries.length > 0) {
+        await sendToTokens(entries, {
+          notification: { title: "You are approved", body: "You can now use chat, prayers and comments in the church app." },
+          android: { notification: { channelId: "announcements" } },
+        });
+      }
+    } catch (e) {
+      console.warn("approval push failed", e);
+    }
   }
 );
 
@@ -1305,49 +1317,75 @@ exports.notifyVisitor = onDocumentCreated(
   }
 );
 
-// ---------- Serving reminders (once a week) ----------
-// Every Thursday evening each volunteer gets ONE notification listing what they are down to serve in the
-// next few days. To use Friday instead, change "thursday" to "friday" and deploy again.
-const SERVING_REMINDER_SCHEDULE = "every thursday 18:00";
-const SERVING_LOOKAHEAD_DAYS = 5;
+// ---------- Serving reminders: a week before, and on the Wednesday before ----------
+// Everyone on a duty gets TWO reminders for it: one a week before the day, and one on the Wednesday before (for a Sunday duty: four
+// days before). Only the people on the duty, never those who said they cannot come, never for a cancelled duty. They are sent at 18:00.
+// The time is in SERVING_REMINDER_SCHEDULE; deploy again after changing it.
+const SERVING_REMINDER_SCHEDULE = "every day 18:00";
+
+/** "2026-11-09" in the church's time zone. */
+function localDay(date) {
+  return date.toLocaleDateString("en-CA", { timeZone: TIME_ZONE });
+}
+/** A day (as "yyyy-mm-dd") some days later or earlier. */
+function addDaysTo(isoDay, n) {
+  const d = new Date(`${isoDay}T12:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  return d.toISOString().slice(0, 10);
+}
 
 exports.servingReminders = onSchedule(
   { schedule: SERVING_REMINDER_SCHEDULE, timeZone: TIME_ZONE, region: REGION },
   async () => {
     if (!REMIND_SERVING) return;
-    const from = new Date();
-    const to = new Date(Date.now() + SERVING_LOOKAHEAD_DAYS * 24 * 3600 * 1000);
+    const now = new Date();
+    const today = localDay(now);
+    const isWednesday = now.toLocaleDateString("en-GB", { timeZone: TIME_ZONE, weekday: "long" }) === "Wednesday";
+    const weekAhead = addDaysTo(today, 7);
+    const from = new Date(Date.now() + 12 * 3600 * 1000);
+    const to = new Date(Date.now() + 9 * 24 * 3600 * 1000);
     const snap = await db.collection("servingSlots").where("start", ">=", from).where("start", "<=", to).get();
 
-    // Collect each person's slots.
-    const perPerson = new Map(); // uid -> [{ start, title }]
+    // Each person's duties for the two reminders.
+    const aWeek = new Map(); // uid -> [{ start, title }]
+    const thisWeek = new Map();
     for (const doc of snap.docs) {
       const slot = doc.data();
+      if (slot.cancelled === true) continue;
       if (!slot.start || typeof slot.start.toDate !== "function") continue;
-      const volunteers = Array.isArray(slot.volunteers) ? slot.volunteers : [];
+      const start = slot.start.toDate();
+      const day = localDay(start);
       const cant = new Set(Array.isArray(slot.cantMake) ? slot.cantMake : []);
-      for (const uid of volunteers) {
+      for (const uid of Array.isArray(slot.volunteers) ? slot.volunteers : []) {
         if (cant.has(uid)) continue;
-        if (!perPerson.has(uid)) perPerson.set(uid, []);
-        perPerson.get(uid).push({ start: slot.start.toDate(), title: slot.title });
+        const entry = { start, title: slot.title };
+        if (day === weekAhead) {
+          if (!aWeek.has(uid)) aWeek.set(uid, []);
+          aWeek.get(uid).push(entry);
+        }
+        // On the Wednesday: the duties of the coming days of this week (Thursday to Sunday).
+        if (isWednesday && day > today && day <= addDaysTo(today, 4)) {
+          if (!thisWeek.has(uid)) thisWeek.set(uid, []);
+          thisWeek.get(uid).push(entry);
+        }
       }
     }
 
-    for (const [uid, slots] of perPerson) {
-      const entries = await tokensFor([uid]);
-      if (entries.length === 0) continue;
-      slots.sort((a, b) => a.start - b.start);
-      const lines = slots.slice(0, 4).map((s) => {
-        const day = s.start.toLocaleDateString("en-GB", { timeZone: TIME_ZONE, weekday: "long" });
-        const time = s.start.toLocaleTimeString("en-GB", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit" });
-        return `${day} ${time}: ${shorten(s.title, 40)}`;
-      });
-      if (slots.length > 4) lines.push(`+${slots.length - 4} more`);
-      await sendToTokens(entries, {
-        notification: { title: "You are serving this week", body: lines.join("\n") },
-        android: { notification: { channelId: "announcements" } },
-      });
-    }
+    const send = async (perPerson, heading) => {
+      for (const [uid, slots] of perPerson) {
+        const entries = await tokensFor([uid]);
+        if (entries.length === 0) continue;
+        slots.sort((a, b) => a.start - b.start);
+        const lines = slots.slice(0, 4).map((s) => `${whenText(s.start)}: ${shorten(s.title, 40)}`);
+        if (slots.length > 4) lines.push(`+${slots.length - 4} more`);
+        await sendToTokens(entries, {
+          notification: { title: heading, body: lines.join("\n") },
+          android: { notification: { channelId: "announcements" } },
+        });
+      }
+    };
+    await send(aWeek, "A week from now you serve");
+    await send(thisWeek, "This week you serve");
   }
 );
 
@@ -1381,6 +1419,9 @@ exports.notifyServingNotice = onDocumentCreated(
         body = count > 1 ? `${title}: ${count} dates, from ${whenText(start)}` : `${title}: ${whenText(start)}`;
       } else if (n.kind === "changed") {
         heading = "Your serving changed";
+        body = count > 1 ? `${title}: ${count} dates moved, from ${whenText(start)}` : `${title}: ${whenText(start)}`;
+      } else if (n.kind === "cancelled") {
+        heading = "Cancelled";
         body = `${title}: ${whenText(start)}`;
       } else if (n.kind === "removed") {
         heading = "You are no longer on the schedule";
@@ -1400,42 +1441,6 @@ exports.notifyServingNotice = onDocumentCreated(
   }
 );
 
-// The evening before: everyone who serves tomorrow gets one reminder (not those who said they cannot come).
-// It runs at 18:00, so "6 to 30 hours from now" is exactly tomorrow.
-exports.servingTomorrow = onSchedule(
-  { schedule: "every day 18:00", timeZone: TIME_ZONE, region: REGION },
-  async () => {
-    if (!REMIND_SERVING) return;
-    const from = new Date(Date.now() + 6 * 3600 * 1000);
-    const to = new Date(Date.now() + 30 * 3600 * 1000);
-    const snap = await db.collection("servingSlots").where("start", ">=", from).where("start", "<", to).get();
-    const perPerson = new Map();
-    for (const doc of snap.docs) {
-      const slot = doc.data();
-      if (!slot.start || typeof slot.start.toDate !== "function") continue;
-      const cant = new Set(Array.isArray(slot.cantMake) ? slot.cantMake : []);
-      for (const uid of Array.isArray(slot.volunteers) ? slot.volunteers : []) {
-        if (cant.has(uid)) continue;
-        if (!perPerson.has(uid)) perPerson.set(uid, []);
-        perPerson.get(uid).push({ start: slot.start.toDate(), title: slot.title });
-      }
-    }
-    for (const [uid, slots] of perPerson) {
-      const entries = await tokensFor([uid]);
-      if (entries.length === 0) continue;
-      slots.sort((a, b) => a.start - b.start);
-      const lines = slots.slice(0, 4).map((s) => {
-        const time = s.start.toLocaleTimeString("en-GB", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit" });
-        return `${time}: ${shorten(s.title, 40)}`;
-      });
-      await sendToTokens(entries, {
-        notification: { title: "Tomorrow you serve", body: lines.join("\n") },
-        android: { notification: { channelId: "announcements" } },
-      });
-    }
-  }
-);
-
 // Someone on a schedule says "I can't make it": the leaders are told, so they can find someone else.
 exports.notifyCantMake = onDocumentUpdated(
   { document: "servingSlots/{slotId}", region: REGION },
@@ -1444,9 +1449,14 @@ exports.notifyCantMake = onDocumentUpdated(
     const before = event.data.before.data() || {};
     const after = event.data.after.data() || {};
     const was = new Set(Array.isArray(before.cantMake) ? before.cantMake : []);
-    const added = (Array.isArray(after.cantMake) ? after.cantMake : []).filter((u) => !was.has(u));
+    const wasInfo = new Set(Object.keys(before.cantInfo || {}));
+    const added = Array.from(new Set([
+      ...(Array.isArray(after.cantMake) ? after.cantMake : []).filter((u) => !was.has(u)),
+      ...Object.keys(after.cantInfo || {}).filter((u) => !wasInfo.has(u)),
+    ]));
     if (added.length === 0) return;
-    const names = added.map((u) => (after.volunteerNames && after.volunteerNames[u]) || "Someone");
+    const names = added.map((u) =>
+      (after.volunteerNames && after.volunteerNames[u]) || (after.cantInfo && after.cantInfo[u] && after.cantInfo[u].name) || "Someone");
     const start = after.start && typeof after.start.toDate === "function" ? after.start.toDate() : null;
     // What they wrote, and a date that suits them better (if they gave one).
     const extra = [];
@@ -1467,6 +1477,84 @@ exports.notifyCantMake = onDocumentUpdated(
       },
       android: { notification: { channelId: "announcements" } },
     });
+  }
+);
+
+// ---------- The "Owner", "Leader" and "Leader until ..." labels: copied to the list of approved members (everyone can read it) ----------
+/** What the label of this person should be: { role, leaderUntil } as fields to set (or to delete). */
+function badgeFields(isOwner, leaderData) {
+  const none = { role: FieldValue.delete(), leaderUntil: FieldValue.delete() };
+  if (isOwner) return { role: "owner", leaderUntil: FieldValue.delete() };
+  if (!leaderData) return none;
+  const until = leaderData.until;
+  if (!until) return { role: "leader", leaderUntil: FieldValue.delete() };
+  if (typeof until.toMillis === "function" && until.toMillis() > Date.now()) return { role: "leader", leaderUntil: until };
+  return none;
+}
+
+async function refreshBadge(uid) {
+  const ref = db.doc(`approvedMembers/${uid}`);
+  if (!(await ref.get()).exists) return;
+  const owner = (await db.doc(`admins/${uid}`).get()).exists;
+  const leader = await db.doc(`leaders/${uid}`).get();
+  await ref.update(badgeFields(owner, leader.exists ? leader.data() : null));
+}
+
+exports.syncLeaderBadge = onDocumentWritten({ document: "leaders/{uid}", region: REGION }, async (event) => refreshBadge(event.params.uid));
+exports.syncOwnerBadge = onDocumentWritten({ document: "admins/{uid}", region: REGION }, async (event) => refreshBadge(event.params.uid));
+
+// Every night: the labels are brought in line with the owners' and leaders' lists (for ended terms, and for anything missed).
+exports.syncLeaderBadges = onSchedule(
+  { schedule: "every day 03:10", timeZone: TIME_ZONE, region: REGION },
+  async () => {
+    const owners = new Set((await db.collection("admins").get()).docs.map((d) => d.id));
+    const leaders = new Map((await db.collection("leaders").get()).docs.map((d) => [d.id, d.data()]));
+    const members = await db.collection("approvedMembers").get();
+    const changes = [];
+    members.docs.forEach((m) => {
+      const cur = m.data();
+      const want = badgeFields(owners.has(m.id), leaders.get(m.id) || null);
+      const wantRole = typeof want.role === "string" ? want.role : null;
+      const wantUntil = want.leaderUntil && typeof want.leaderUntil.toMillis === "function" ? want.leaderUntil.toMillis() : null;
+      const curUntil = cur.leaderUntil && typeof cur.leaderUntil.toMillis === "function" ? cur.leaderUntil.toMillis() : null;
+      if ((cur.role || null) !== wantRole || curUntil !== wantUntil) changes.push([m.ref, want]);
+    });
+    for (let i = 0; i < changes.length; i += 400) {
+      const batch = db.batch();
+      changes.slice(i, i + 400).forEach(([ref, data]) => batch.update(ref, data));
+      await batch.commit();
+    }
+  }
+);
+
+// ---------- A person changes their name: the copies other people read are changed too, at once ----------
+// The name is copied into the list of approved members, the chat rooms the person is in, their duties and their (not anonymous)
+// prayers. (The names above chat messages and comments are read live from the list of approved members by the app.)
+exports.syncProfileName = onDocumentUpdated(
+  { document: "users/{uid}", region: REGION },
+  async (event) => {
+    const before = event.data.before.data() || {};
+    const after = event.data.after.data() || {};
+    const name = String(after.displayName || "").trim().slice(0, 60);
+    if (!name || name === String(before.displayName || "").trim()) return;
+    const uid = event.params.uid;
+    const changes = [];
+    const member = db.doc(`approvedMembers/${uid}`);
+    if ((await member.get()).exists) changes.push([member, { name }]);
+    (await db.collection("chatRooms").where("memberIds", "array-contains", uid).get()).docs.forEach((d) =>
+      changes.push([d.ref, { [`memberNames.${uid}`]: name }])
+    );
+    (await db.collection("servingSlots").where("volunteers", "array-contains", uid).get()).docs.forEach((d) =>
+      changes.push([d.ref, { [`volunteerNames.${uid}`]: name }])
+    );
+    (await db.collection("prayers").where("authorId", "==", uid).get()).docs.forEach((d) => {
+      if (d.data().anonymous !== true) changes.push([d.ref, { authorName: name }]);
+    });
+    for (let i = 0; i < changes.length; i += 400) {
+      const batch = db.batch();
+      changes.slice(i, i + 400).forEach(([ref, data]) => batch.update(ref, data));
+      await batch.commit();
+    }
   }
 );
 

@@ -1,5 +1,9 @@
 package org.yourchurch.app.ui.common
 
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.material3.CircularProgressIndicator
+import org.yourchurch.app.data.EmailChange
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -105,7 +109,7 @@ fun CompleteProfileDialog(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                Text(stringResource(R.string.profile_text_complete))
+                InfoHint(stringResource(R.string.profile_text_complete))
                 ProfileFields(name, { name = it }, phone, { phone = it }, email = null)
             }
         },
@@ -124,6 +128,58 @@ fun CompleteProfileDialog(
     )
 }
 
+/** Change my e-mail: the new address and the password; a confirmation link is sent to the new address. */
+@Composable
+fun ChangeEmailDialog(currentEmail: String, state: EmailChange, onSend: (String, String) -> Unit, onClose: () -> Unit) {
+    var newEmail by rememberSaveable { mutableStateOf("") }
+    var password by rememberSaveable { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onClose,
+        title = { Text(stringResource(R.string.email_change_title)) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                if (state.sentTo != null) {
+                    Text(stringResource(R.string.email_change_sent, state.sentTo))
+                } else {
+                    Text(currentEmail, style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    OutlinedTextField(
+                        value = newEmail,
+                        onValueChange = { newEmail = it.take(120) },
+                        label = { Text(stringResource(R.string.email_change_new)) },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    OutlinedTextField(
+                        value = password,
+                        onValueChange = { password = it.take(100) },
+                        label = { Text(stringResource(R.string.email_change_password)) },
+                        singleLine = true,
+                        visualTransformation = PasswordVisualTransformation(),
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    state.error?.let { Text(stringResource(it.messageRes), color = MaterialTheme.colorScheme.error) }
+                }
+            }
+        },
+        confirmButton = {
+            if (state.sentTo != null) {
+                TextButton(onClick = onClose) { Text(stringResource(R.string.close)) }
+            } else {
+                TextButton(
+                    onClick = { onSend(newEmail, password) },
+                    enabled = !state.working && newEmail.isNotBlank() && password.isNotEmpty()
+                ) {
+                    if (state.working) CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                    else Text(stringResource(R.string.email_change_send))
+                }
+            }
+        },
+        dismissButton = { if (state.sentTo == null) TextButton(onClick = onClose) { Text(stringResource(R.string.cancel)) } }
+    )
+}
+
 /** "My profile" from the account menu: change name and phone number. */
 @Composable
 fun EditProfileDialog(
@@ -134,12 +190,26 @@ fun EditProfileDialog(
     onSave: (String, String) -> Unit,
     onDismiss: () -> Unit,
     /** When given, the profile has a Sign out button. */
-    onSignOut: (() -> Unit)? = null
+    onSignOut: (() -> Unit)? = null,
+    /** When given, the profile has a "Change e-mail" button. */
+    emailChange: EmailChange = EmailChange(),
+    onChangeEmail: ((String, String) -> Unit)? = null,
+    onEmailDialogClosed: () -> Unit = {}
 ) {
+    var showEmail by remember { mutableStateOf(false) }
     var confirmSignOut by remember { mutableStateOf(false) }
     var name by rememberSaveable { mutableStateOf(initialName) }
     var phone by rememberSaveable { mutableStateOf(initialPhone) }
     val valid = name.isNotBlank() && (phone.isBlank() || normalizePhone(phone) != null)
+
+    if (showEmail && onChangeEmail != null) {
+        ChangeEmailDialog(
+            currentEmail = email,
+            state = emailChange,
+            onSend = onChangeEmail,
+            onClose = { showEmail = false; onEmailDialogClosed() }
+        )
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -151,6 +221,9 @@ fun EditProfileDialog(
             ) {
                 ProfilePhotoSection(uid = uid, name = name)
                 ProfileFields(name, { name = it }, phone, { phone = it }, email = email)
+                if (onChangeEmail != null) {
+                    TextButton(onClick = { showEmail = true }) { Text(stringResource(R.string.email_change_button)) }
+                }
                 ActivityStatusPicker()
                 if (onSignOut != null) {
                     TextButton(onClick = { confirmSignOut = true }) {

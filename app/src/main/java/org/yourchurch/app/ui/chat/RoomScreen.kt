@@ -2,6 +2,8 @@
 
 package org.yourchurch.app.ui.chat
 
+import org.yourchurch.app.ui.common.RoleBadge
+import org.yourchurch.app.data.NameDirectory
 import android.Manifest
 import android.content.ClipData
 import android.content.ClipboardManager
@@ -835,7 +837,7 @@ private fun MessageBubble(
         if (!mine) {
             PersonAvatar(
                 uid = message.senderId,
-                name = message.senderName,
+                name = NameDirectory.nameOf(message.senderId, message.senderName),
                 size = 32.dp,
                 modifier = if (onSenderClick != null) Modifier.clickable { onSenderClick() } else Modifier
             )
@@ -865,12 +867,13 @@ private fun MessageBubble(
                         }
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                message.senderName,
+                                NameDirectory.nameOf(message.senderId, message.senderName),
                                 style = MaterialTheme.typography.labelMedium,
                                 fontWeight = FontWeight.Medium,
                                 color = MaterialTheme.colorScheme.primary,
                                 modifier = if (onSenderClick != null) Modifier.clickable { onSenderClick() } else Modifier
                             )
+                            RoleBadge(message.senderId, Modifier.padding(start = 6.dp))
                             if (title != null) {
                                 Spacer(Modifier.width(6.dp))
                                 Text(

@@ -1,5 +1,8 @@
 package org.yourchurch.app.data
 
+import org.yourchurch.app.ApprovalWatcher
+import kotlinx.coroutines.flow.drop
+import androidx.compose.runtime.snapshotFlow
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.google.firebase.firestore.DocumentSnapshot
@@ -143,12 +146,26 @@ class PrayersViewModel : ViewModel() {
 
     private var jobs: List<Job> = emptyList()
     private var started = ""
+    private var lastUid = ""
+    private var lastAdmin = false
+
+    init {
+        // When this person has just been approved, the requests are loaded again (before that they were not allowed).
+        viewModelScope.launch {
+            snapshotFlow { ApprovalWatcher.version }.drop(1).collect {
+                started = ""
+                if (lastUid.isNotEmpty()) start(lastUid, lastAdmin)
+            }
+        }
+    }
 
     /** Starts watching. Safe to call repeatedly. */
     fun start(uid: String, isAdmin: Boolean) {
         val key = "$uid|$isAdmin"
         if (started == key) return
         started = key
+        lastUid = uid
+        lastAdmin = isAdmin
         jobs.forEach { it.cancel() }
         _state.value = PrayersState()
         jobs = listOf(

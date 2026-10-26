@@ -72,11 +72,7 @@ fun ReadPane(uid: String, isAdmin: Boolean, vm: WordViewModel) {
             if (isAdmin) item {
                 Text(stringResource(R.string.word_bible_title), style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp))
                 InfoHint(stringResource(R.string.word_bible_hint), style = MaterialTheme.typography.bodyMedium)
-                Text(
-                    stringResource(R.string.word_links_leaders_only),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
+                InfoHint(stringResource(R.string.word_links_leaders_only))
             }
             if (isAdmin && state.links.isEmpty()) {
                 item {

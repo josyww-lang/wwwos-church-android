@@ -1,5 +1,11 @@
 package org.yourchurch.app.ui
 
+import android.widget.Toast
+import org.yourchurch.app.data.AvatarStore
+import org.yourchurch.app.ApprovalWatcher
+import org.yourchurch.app.PendingApprovals
+import org.yourchurch.app.ChatNav
+import org.yourchurch.app.data.NameDirectory
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
@@ -117,6 +123,7 @@ fun AppRoot(authVm: AuthViewModel = viewModel()) {
 
     val context = LocalContext.current
     LaunchedEffect(state.user?.uid) { SafetySetup.identify(state.user?.uid) }
+    LaunchedEffect(state.user?.uid) { if (state.user != null) NameDirectory.start() else NameDirectory.stop() }
     // While the app is open, tell the others (every 90 seconds) that this person is active.
     val presenceContext = LocalContext.current.applicationContext
     LaunchedEffect(state.user?.uid) {
@@ -244,6 +251,36 @@ private fun MainScaffold(auth: AuthState, authVm: AuthViewModel) {
         }
     }
 
+    // Leaders: the people waiting for approval. The red number stays until each one is approved or removed.
+    val waiting = if (auth.isAdmin) chatState.people.count { !it.approved } else 0
+    LaunchedEffect(waiting) { PendingApprovals.count = waiting }
+    // When this person has just been approved: everything that needed approval is loaded again, at once.
+    var wasApproved by remember { mutableStateOf<Boolean?>(null) }
+    LaunchedEffect(chatState.approved) {
+        if (chatState.approved == true && wasApproved == false) ApprovalWatcher.version++
+        if (chatState.approved != null) wasApproved = chatState.approved
+    }
+    LaunchedEffect(ApprovalWatcher.version) {
+        if (ApprovalWatcher.version > 0) {
+            NameDirectory.stop(); NameDirectory.start()
+            AvatarStore.restart()
+            badgeVm.restart()
+        }
+    }
+    // A change of role (made by an owner) is shown at once on this phone.
+    LaunchedEffect(auth.roleNotice) {
+        if (auth.roleNotice != 0) {
+            Toast.makeText(
+                context,
+                context.getString(if (auth.roleNotice == 1) R.string.role_notice_leader else R.string.role_notice_ended),
+                Toast.LENGTH_LONG
+            ).show()
+            authVm.clearRoleNotice()
+        }
+    }
+    // The e-mail may have been changed from the link that was sent: it is copied into the profile.
+    LaunchedEffect(user.uid) { authVm.syncEmail() }
+
     // Tapping a chat notification opens the Chat tab.
     val pendingRoom = PendingRoom.roomId
     LaunchedEffect(pendingRoom) {
@@ -254,7 +291,10 @@ private fun MainScaffold(auth: AuthState, authVm: AuthViewModel) {
         AccountMenu(
             auth = auth,
             onSaveProfile = authVm::saveProfile,
-            onSignOut = authVm::signOut
+            onSignOut = authVm::signOut,
+            onChangeEmail = authVm::changeEmail,
+            onClearEmailChange = authVm::clearEmailChange,
+            onSyncEmail = authVm::syncEmail
         )
     }
 
@@ -304,6 +344,7 @@ private fun MainScaffold(auth: AuthState, authVm: AuthViewModel) {
             "sermons" -> navigate(HomeTarget.Sermons)
             "news" -> navigate(HomeTarget.Announcements)
             "events" -> navigate(HomeTarget.Events)
+            "people" -> { selected = Tab.Chat.ordinal; ChatNav.openPeople = true }
         }
         if (pendingTarget != null) PendingTarget.target = null
     }
@@ -331,7 +372,7 @@ private fun MainScaffold(auth: AuthState, authVm: AuthViewModel) {
                         },
                         icon = {
                             val count = when (tab) {
-                                Tab.Chat -> unreadChats
+                                Tab.Chat -> unreadChats + waiting
                                 Tab.Church -> sectionBadges.values.sum()
                                 else -> 0
                             }
