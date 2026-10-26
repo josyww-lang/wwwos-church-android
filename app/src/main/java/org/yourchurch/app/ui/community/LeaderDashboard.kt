@@ -37,6 +37,7 @@ import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withTimeout
 import org.yourchurch.app.R
+import org.yourchurch.app.ui.common.InfoHint
 import org.yourchurch.app.ui.common.SkeletonCards
 
 /** The numbers on the leader dashboard. A value of -1 means "couldn't be counted". */
@@ -95,11 +96,7 @@ fun LeaderDashboard() {
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text(
-            stringResource(R.string.dashboard_hint),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        InfoHint(stringResource(R.string.dashboard_hint), style = MaterialTheme.typography.bodyMedium)
         val c = counts
         if (c == null) {
             SkeletonCards(count = 4)

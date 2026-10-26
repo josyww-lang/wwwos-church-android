@@ -1,8 +1,6 @@
 <resources>
+    <!-- The start screen of the system (Android 12 and newer) is set in values-v31/themes.xml. -->
     <style name="Theme.ChurchApp" parent="android:Theme.Material.Light.NoActionBar">
         <item name="android:windowBackground">@drawable/splash_window</item>
-        <!-- Android 12 and newer: the system start screen, with the logo (the biggest the system allows) -->
-        <item name="android:windowSplashScreenBackground">@color/splash_background</item>
-        <item name="android:windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
     </style>
 </resources>

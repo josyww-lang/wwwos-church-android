@@ -77,7 +77,6 @@ fun OfflineBanner() {
     }
 }
 
-
 /** Shown when the profile or leader status could not be loaded: says why (briefly) and offers a retry. */
 @Composable
 fun ProfileProblemBanner(reason: String, onRetry: () -> Unit) {

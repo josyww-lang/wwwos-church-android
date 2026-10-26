@@ -49,6 +49,7 @@ import org.yourchurch.app.data.AuthViewModel
 import org.yourchurch.app.data.normalizePhone
 import org.yourchurch.app.ui.common.ChurchEmblem
 import org.yourchurch.app.ui.common.ChurchName
+import org.yourchurch.app.ui.common.InfoButton
 import org.yourchurch.app.ui.common.LanguageDialog
 import org.yourchurch.app.ui.theme.heroBrush
 
@@ -125,6 +126,7 @@ fun SignInScreen(vm: AuthViewModel) {
             )
             if (creating) {
                 val phoneInvalid = phone.isNotBlank() && normalizePhone(phone) == null
+                var showWhy by rememberSaveable { mutableStateOf(false) }      // why the phone number is asked: behind the "i"
                 OutlinedTextField(
                     value = phone,
                     onValueChange = { phone = it.take(25) },
@@ -133,15 +135,11 @@ fun SignInScreen(vm: AuthViewModel) {
                     isError = phoneInvalid,
                     shape = RoundedCornerShape(14.dp),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-                    supportingText = {
-                        Text(stringResource(if (phoneInvalid) R.string.err_phone_invalid else R.string.phone_hint))
-                    },
+                    trailingIcon = { InfoButton(shown = showWhy, onClick = { showWhy = !showWhy }) },
+                    supportingText = if (phoneInvalid || showWhy) {
+                        { Text(if (phoneInvalid) stringResource(R.string.err_phone_invalid) else stringResource(R.string.phone_why) + " " + stringResource(R.string.phone_hint)) }
+                    } else null,
                     modifier = Modifier.fillMaxWidth()
-                )
-                Text(
-                    stringResource(R.string.phone_why),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
             }
             OutlinedTextField(

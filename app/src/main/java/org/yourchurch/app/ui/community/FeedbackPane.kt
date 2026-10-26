@@ -49,6 +49,7 @@ import org.yourchurch.app.R
 import org.yourchurch.app.data.FEEDBACK_CATEGORIES
 import org.yourchurch.app.data.FeedbackMessage
 import org.yourchurch.app.data.FeedbackViewModel
+import org.yourchurch.app.ui.common.InfoHint
 
 private fun categoryLabel(code: String): Int = when (code) {
     "idea" -> R.string.fb_idea
@@ -84,7 +85,7 @@ private fun FeedbackForm(uid: String, myName: String, vm: FeedbackViewModel) {
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
         Text(stringResource(R.string.fb_title), style = MaterialTheme.typography.headlineSmall)
-        Text(stringResource(R.string.fb_intro), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        InfoHint(stringResource(R.string.fb_intro), style = MaterialTheme.typography.bodyMedium)
 
         Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             FEEDBACK_CATEGORIES.forEach { code ->
@@ -110,11 +111,7 @@ private fun FeedbackForm(uid: String, myName: String, vm: FeedbackViewModel) {
             Switch(checked = anonymous, onCheckedChange = { anonymous = it }, enabled = !sending)
         }
         if (anonymous) {
-            Text(
-                stringResource(R.string.fb_anonymous_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            InfoHint(stringResource(R.string.fb_anonymous_hint))
         }
 
         if (failed) Text(stringResource(R.string.err_save_failed), color = MaterialTheme.colorScheme.error)

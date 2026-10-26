@@ -1325,7 +1325,9 @@ exports.servingReminders = onSchedule(
       const slot = doc.data();
       if (!slot.start || typeof slot.start.toDate !== "function") continue;
       const volunteers = Array.isArray(slot.volunteers) ? slot.volunteers : [];
+      const cant = new Set(Array.isArray(slot.cantMake) ? slot.cantMake : []);
       for (const uid of volunteers) {
+        if (cant.has(uid)) continue;
         if (!perPerson.has(uid)) perPerson.set(uid, []);
         perPerson.get(uid).push({ start: slot.start.toDate(), title: slot.title });
       }
@@ -1346,6 +1348,125 @@ exports.servingReminders = onSchedule(
         android: { notification: { channelId: "announcements" } },
       });
     }
+  }
+);
+
+// ---------- Serving schedules: only the people a leader chose are told ----------
+/** "Sunday 2 November, 10:30" in the church's time zone. */
+function whenText(date) {
+  const day = date.toLocaleDateString("en-GB", { timeZone: TIME_ZONE, weekday: "long", day: "numeric", month: "long" });
+  const time = date.toLocaleTimeString("en-GB", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit" });
+  return `${day}, ${time}`;
+}
+
+// A leader asks (a document in servingNotices) that some people be told: they were added to a duty, a duty changed, or they were removed.
+// Nobody else gets anything. The document is removed when it has been sent.
+exports.notifyServingNotice = onDocumentCreated(
+  { document: "servingNotices/{noticeId}", region: REGION },
+  async (event) => {
+    const snap = event.data;
+    if (!snap) return;
+    try {
+      if (!REMIND_SERVING) return;
+      const n = snap.data();
+      const uids = Array.isArray(n.uids) ? n.uids.filter((u) => typeof u === "string").slice(0, 50) : [];
+      const start = n.start && typeof n.start.toDate === "function" ? n.start.toDate() : null;
+      if (uids.length === 0 || !start) return;
+      const title = shorten(n.title, 60);
+      const count = Number.isInteger(n.count) ? n.count : 1;
+      let heading;
+      let body;
+      if (n.kind === "assigned") {
+        heading = "You are on the schedule";
+        body = count > 1 ? `${title}: ${count} dates, from ${whenText(start)}` : `${title}: ${whenText(start)}`;
+      } else if (n.kind === "changed") {
+        heading = "Your serving changed";
+        body = `${title}: ${whenText(start)}`;
+      } else if (n.kind === "removed") {
+        heading = "You are no longer on the schedule";
+        body = `${title}: ${whenText(start)}`;
+      } else {
+        return;
+      }
+      const entries = await tokensFor(uids);
+      if (entries.length === 0) return;
+      await sendToTokens(entries, {
+        notification: { title: heading, body },
+        android: { notification: { channelId: "announcements" } },
+      });
+    } finally {
+      await snap.ref.delete().catch(() => {});
+    }
+  }
+);
+
+// The evening before: everyone who serves tomorrow gets one reminder (not those who said they cannot come).
+// It runs at 18:00, so "6 to 30 hours from now" is exactly tomorrow.
+exports.servingTomorrow = onSchedule(
+  { schedule: "every day 18:00", timeZone: TIME_ZONE, region: REGION },
+  async () => {
+    if (!REMIND_SERVING) return;
+    const from = new Date(Date.now() + 6 * 3600 * 1000);
+    const to = new Date(Date.now() + 30 * 3600 * 1000);
+    const snap = await db.collection("servingSlots").where("start", ">=", from).where("start", "<", to).get();
+    const perPerson = new Map();
+    for (const doc of snap.docs) {
+      const slot = doc.data();
+      if (!slot.start || typeof slot.start.toDate !== "function") continue;
+      const cant = new Set(Array.isArray(slot.cantMake) ? slot.cantMake : []);
+      for (const uid of Array.isArray(slot.volunteers) ? slot.volunteers : []) {
+        if (cant.has(uid)) continue;
+        if (!perPerson.has(uid)) perPerson.set(uid, []);
+        perPerson.get(uid).push({ start: slot.start.toDate(), title: slot.title });
+      }
+    }
+    for (const [uid, slots] of perPerson) {
+      const entries = await tokensFor([uid]);
+      if (entries.length === 0) continue;
+      slots.sort((a, b) => a.start - b.start);
+      const lines = slots.slice(0, 4).map((s) => {
+        const time = s.start.toLocaleTimeString("en-GB", { timeZone: TIME_ZONE, hour: "2-digit", minute: "2-digit" });
+        return `${time}: ${shorten(s.title, 40)}`;
+      });
+      await sendToTokens(entries, {
+        notification: { title: "Tomorrow you serve", body: lines.join("\n") },
+        android: { notification: { channelId: "announcements" } },
+      });
+    }
+  }
+);
+
+// Someone on a schedule says "I can't make it": the leaders are told, so they can find someone else.
+exports.notifyCantMake = onDocumentUpdated(
+  { document: "servingSlots/{slotId}", region: REGION },
+  async (event) => {
+    if (!REMIND_SERVING) return;
+    const before = event.data.before.data() || {};
+    const after = event.data.after.data() || {};
+    const was = new Set(Array.isArray(before.cantMake) ? before.cantMake : []);
+    const added = (Array.isArray(after.cantMake) ? after.cantMake : []).filter((u) => !was.has(u));
+    if (added.length === 0) return;
+    const names = added.map((u) => (after.volunteerNames && after.volunteerNames[u]) || "Someone");
+    const start = after.start && typeof after.start.toDate === "function" ? after.start.toDate() : null;
+    // What they wrote, and a date that suits them better (if they gave one).
+    const extra = [];
+    for (const u of added) {
+      const info = after.cantInfo && after.cantInfo[u];
+      if (!info) continue;
+      if (info.note) extra.push(`"${shorten(info.note, 100)}"`);
+      if (info.suggest && typeof info.suggest.toDate === "function") {
+        extra.push(`Suggests ${info.suggest.toDate().toLocaleDateString("en-GB", { timeZone: TIME_ZONE, weekday: "long", day: "numeric", month: "long" })}`);
+      }
+    }
+    const entries = (await tokensFor(await adminIds())).filter((e) => !added.includes(e.uid));
+    if (entries.length === 0) return;
+    await sendToTokens(entries, {
+      notification: {
+        title: `${shorten(names.join(", "), 50)} can't make it`,
+        body: [`${shorten(after.title, 50)}${start ? ": " + whenText(start) : ""}`, ...extra].join("\n"),
+      },
+      android: { notification: { channelId: "announcements" } },
+    });
   }
 );
 

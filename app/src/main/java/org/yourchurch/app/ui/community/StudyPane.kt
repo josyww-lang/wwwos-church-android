@@ -125,7 +125,6 @@ internal fun LessonForm(lesson: Lesson, onSave: (Lesson) -> Unit, onDismiss: () 
     }
 }
 
-
 /** A lesson in a list: the passage, the title, the first lines and the date. */
 @Composable
 internal fun LessonCard(lesson: Lesson, onClick: () -> Unit) {

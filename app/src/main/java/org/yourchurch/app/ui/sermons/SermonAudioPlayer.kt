@@ -353,7 +353,6 @@ private fun formatTime(ms: Long): String {
     return if (hours > 0) "%d:%02d:%02d".format(hours, minutes, seconds) else "%d:%02d".format(minutes, seconds)
 }
 
-
 /** Sleep timer, the queue and saving for offline listening. */
 @Composable
 private fun PlayerExtras(sermon: Sermon) {

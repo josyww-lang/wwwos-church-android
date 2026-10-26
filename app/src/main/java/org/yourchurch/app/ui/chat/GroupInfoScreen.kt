@@ -60,6 +60,7 @@ import org.yourchurch.app.data.ChatRoom
 import org.yourchurch.app.data.ChatState
 import org.yourchurch.app.data.ChatViewModel
 import org.yourchurch.app.ui.common.PersonAvatar
+import org.yourchurch.app.ui.common.TitleWithInfo
 import org.yourchurch.app.ui.theme.GROUP_COLORS
 import org.yourchurch.app.ui.theme.groupColor
 
@@ -219,13 +220,8 @@ fun GroupInfoScreen(
             // Mute: no notifications from this group (new messages still show inside the app).
             if (myUid in room.memberIds) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                    TitleWithInfo(hint = stringResource(R.string.chat_muted_hint), modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                         Text(stringResource(R.string.chat_mute), style = MaterialTheme.typography.titleMedium)
-                        Text(
-                            stringResource(R.string.chat_muted_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
                     }
                     Switch(checked = room.id in state.muted, onCheckedChange = { vm.toggleMute(room.id) })
                 }
@@ -234,12 +230,19 @@ fun GroupInfoScreen(
             // Choose who can see my phone number in this group.
             if (myUid in room.memberIds) {
                 Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                    Text(stringResource(R.string.share_phone), style = MaterialTheme.typography.titleMedium)
-                    Text(
-                        stringResource(if (myPhone.isBlank()) R.string.share_phone_need else R.string.share_phone_hint),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    if (myPhone.isBlank()) {
+                        // Something to do first: this stays on the screen.
+                        Text(stringResource(R.string.share_phone), style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            stringResource(R.string.share_phone_need),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    } else {
+                        TitleWithInfo(hint = stringResource(R.string.share_phone_hint)) {
+                            Text(stringResource(R.string.share_phone), style = MaterialTheme.typography.titleMedium)
+                        }
+                    }
                     val options = if (myUid == room.createdBy) {
                         listOf("" to R.string.share_none, "group" to R.string.share_group)
                     } else {

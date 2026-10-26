@@ -1,6 +1,9 @@
 package org.yourchurch.app.ui.community
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -16,7 +19,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -25,7 +28,10 @@ import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.DatePicker
 import androidx.compose.material3.DatePickerDialog
@@ -54,8 +60,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -77,6 +85,7 @@ import org.yourchurch.app.data.daysSince
 import org.yourchurch.app.data.nextDayOf
 import org.yourchurch.app.data.readingStreak
 import org.yourchurch.app.data.todayIndex
+import org.yourchurch.app.ui.common.InfoHint
 import org.yourchurch.app.ui.common.SkeletonCards
 
 /**
@@ -99,7 +108,11 @@ fun PlansPane(
     var showForm by remember { mutableStateOf(false) }
     var confirmDelete by remember { mutableStateOf(false) }
     var confirmRestart by remember { mutableStateOf(false) }
-    var menuFor by remember { mutableStateOf(-1) }
+    var showAll by rememberSaveable { mutableStateOf(false) }       // all the days, or only the next few
+    var showInfo by rememberSaveable { mutableStateOf(false) }
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    var heroMenu by remember { mutableStateOf(false) }
     val plan = state.plan
 
     if (state.loading) {
@@ -110,6 +123,18 @@ fun PlansPane(
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
         ) {
+            // Leaders: "New reading plan" is at the top, where it is easy to find.
+            if (canAdd) {
+                item {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                        OutlinedButton(onClick = { showForm = true }) {
+                            Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(stringResource(R.string.plans_new))
+                        }
+                    }
+                }
+            }
             if (plan == null) {
                 item {
                     Text(
@@ -125,118 +150,200 @@ fun PlansPane(
                 val finished = next >= plan.days.size
                 val away = !finished && state.done.isNotEmpty() && (state.lastReadAt?.let { daysSince(it) >= 3 } == true)
                 val churchDay = plan.todayIndex()
+                val canManage = isAdmin || (plan.authorId.isNotEmpty() && plan.authorId == uid)
+                // 1. Your next reading, with what to do about it: read it, write about it, or mark it as read.
                 item {
-                    WordCard(onClick = {}) {
-                        Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                Text(plan.title, style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp), modifier = Modifier.weight(1f))
-                                if (isAdmin || (plan.authorId.isNotEmpty() && plan.authorId == uid)) LeaderMenu(onEdit = null, onDelete = { confirmDelete = true })
-                            }
+                    val onColor = MaterialTheme.colorScheme.onPrimary
+                    val shape = RoundedCornerShape(22.dp)
+                    Column(
+                        Modifier
+                            .fillMaxWidth()
+                            .shadow(4.dp, shape)
+                            .clip(shape)
+                            .background(MaterialTheme.colorScheme.primary)
+                            .padding(start = 20.dp, end = 12.dp, top = 12.dp, bottom = 16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                stringResource(R.string.reading_progress_pct, state.done.size, plan.days.size, if (plan.days.isEmpty()) 0 else state.done.size * 100 / plan.days.size),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                plan.title,
+                                style = MaterialTheme.typography.labelLarge,
+                                color = onColor.copy(alpha = 0.85f),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
                             )
-                            LinearProgressIndicator(
-                                progress = { if (plan.days.isEmpty()) 0f else (state.done.size.toFloat() / plan.days.size).coerceIn(0f, 1f) },
-                                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp))
-                            )
-                            val streak = readingStreak(state.activeDays)
-                            if (streak > 1) {
-                                Text(stringResource(R.string.reading_streak, streak), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+                            IconButton(onClick = { showInfo = !showInfo }, modifier = Modifier.size(36.dp)) {
+                                Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.plans_info), tint = onColor.copy(alpha = 0.85f))
                             }
-                            if (finished) {
-                                Text(stringResource(R.string.plans_finished), style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.primary)
-                            } else if (away) {
-                                Text(
-                                    stringResource(R.string.reading_welcome_back) + "  \u00B7  " + stringResource(R.string.plans_day, next + 1),
-                                    style = MaterialTheme.typography.titleMedium,
-                                    color = MaterialTheme.colorScheme.primary
-                                )
-                            }
-                            if (churchDay in 0 until plan.days.size) {
-                                Text(
-                                    stringResource(R.string.plans_church_day, churchDay + 1),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                            }
-                            Text(
-                                stringResource(R.string.plans_self_paced_hint),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                            if (state.done.isNotEmpty()) {
-                                TextButton(onClick = { confirmRestart = true }) { Text(stringResource(R.string.plans_start_over)) }
-                            }
-                        }
-                    }
-                }
-                if (isAdmin && state.everyone.isNotEmpty()) {
-                    item { EveryoneCard(plan, state.everyone) }
-                }
-                itemsIndexed(plan.days, key = { index, _ -> "d$index" }) { index, reading ->
-                    val isNext = index == next && !finished
-                    WordCard(onClick = { vm.toggleDay(index) }) {
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(if (isNext) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else androidx.compose.ui.graphics.Color.Transparent)
-                                .padding(horizontal = 8.dp, vertical = 6.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Checkbox(checked = index in state.done, onCheckedChange = { vm.toggleDay(index) })
-                            Column(Modifier.weight(1f).padding(end = 8.dp)) {
-                                Text(
-                                    stringResource(R.string.plans_day, index + 1),
-                                    style = MaterialTheme.typography.labelLarge,
-                                    color = if (isNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
-                                )
-                                Text(
-                                    reading,
-                                    style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp),
-                                    maxLines = 2,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                // Read it in the Bible, and (if you wish) write what it says to you. Reflecting is optional.
-                                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                                    TextButton(onClick = { onRead(reading, index) }) { Text(stringResource(R.string.plans_read_it)) }
-                                    TextButton(onClick = { onReflect(reading, index) }) {
-                                        if (index in state.reflected) {
-                                            Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
-                                            Spacer(Modifier.width(4.dp))
-                                        }
-                                        Text(stringResource(R.string.plans_reflect))
-                                    }
+                            Box {
+                                IconButton(onClick = { heroMenu = true }, modifier = Modifier.size(36.dp)) {
+                                    Icon(Icons.Filled.MoreVert, contentDescription = null, tint = onColor.copy(alpha = 0.85f))
                                 }
-                            }
-                            if (index !in state.done) {
-                                Box {
-                                    IconButton(onClick = { menuFor = index }) {
-                                        Icon(Icons.Filled.MoreVert, contentDescription = null)
-                                    }
-                                    DropdownMenu(expanded = menuFor == index, onDismissRequest = { menuFor = -1 }) {
+                                DropdownMenu(expanded = heroMenu, onDismissRequest = { heroMenu = false }) {
+                                    if (state.done.isNotEmpty()) {
                                         DropdownMenuItem(
-                                            text = { Text(stringResource(R.string.plans_continue_here)) },
+                                            text = { Text(stringResource(R.string.plans_start_over)) },
                                             onClick = {
-                                                menuFor = -1
-                                                vm.continueFrom(index)
+                                                heroMenu = false
+                                                confirmRestart = true
+                                            }
+                                        )
+                                    }
+                                    if (canManage) {
+                                        DropdownMenuItem(
+                                            text = { Text(stringResource(R.string.word_delete), color = MaterialTheme.colorScheme.error) },
+                                            onClick = {
+                                                heroMenu = false
+                                                confirmDelete = true
                                             }
                                         )
                                     }
                                 }
                             }
                         }
+                        AnimatedVisibility(visible = showInfo) {
+                            Text(
+                                stringResource(R.string.plans_self_paced_hint),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = onColor.copy(alpha = 0.9f),
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                        }
+                        if (finished) {
+                            Text(
+                                stringResource(R.string.plans_finished),
+                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 22.sp, fontWeight = FontWeight.Bold),
+                                color = onColor
+                            )
+                        } else {
+                            Text(
+                                (if (away) stringResource(R.string.reading_welcome_back) + "  \u00B7  " else "") + stringResource(R.string.plans_day, next + 1).uppercase() + "  \u00B7  " + plannedDate(plan, next),
+                                style = MaterialTheme.typography.labelMedium,
+                                color = onColor.copy(alpha = 0.85f)
+                            )
+                            Text(
+                                plan.days[next],
+                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 26.sp, fontWeight = FontWeight.Bold),
+                                color = onColor,
+                                modifier = Modifier.padding(end = 8.dp)
+                            )
+                        }
+                        LinearProgressIndicator(
+                            progress = { if (plan.days.isEmpty()) 0f else (state.done.size.toFloat() / plan.days.size).coerceIn(0f, 1f) },
+                            color = onColor,
+                            trackColor = onColor.copy(alpha = 0.25f),
+                            modifier = Modifier.fillMaxWidth().padding(end = 8.dp).height(8.dp).clip(RoundedCornerShape(4.dp))
+                        )
+                        val streak = readingStreak(state.activeDays)
+                        Text(
+                            stringResource(R.string.reading_progress_pct, state.done.size, plan.days.size, if (plan.days.isEmpty()) 0 else state.done.size * 100 / plan.days.size) +
+                                (if (streak > 1) "  \u00B7  " + stringResource(R.string.reading_streak, streak) else ""),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = onColor.copy(alpha = 0.9f)
+                        )
+                        if (!finished) {
+                            Row(Modifier.padding(end = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                Button(
+                                    onClick = { onRead(plan.days[next], next) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.buttonColors(containerColor = onColor, contentColor = MaterialTheme.colorScheme.primary)
+                                ) { Text(stringResource(R.string.plans_read_it)) }
+                                OutlinedButton(
+                                    onClick = { onReflect(plan.days[next], next) },
+                                    modifier = Modifier.weight(1f),
+                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = onColor),
+                                    border = BorderStroke(1.dp, onColor.copy(alpha = 0.6f))
+                                ) {
+                                    if (next in state.reflected) {
+                                        Icon(Icons.Filled.Check, contentDescription = null, modifier = Modifier.size(16.dp))
+                                        Spacer(Modifier.width(4.dp))
+                                    }
+                                    Text(stringResource(R.string.plans_reflect))
+                                }
+                            }
+                            TextButton(
+                                onClick = { vm.toggleDay(next) },
+                                modifier = Modifier.fillMaxWidth().padding(end = 8.dp),
+                                colors = ButtonDefaults.textButtonColors(contentColor = onColor)
+                            ) { Text(stringResource(R.string.reading_mark)) }
+                        }
                     }
                 }
-            }
-            if (canAdd) {
-                item {
-                    OutlinedButton(onClick = { showForm = true }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.plans_new))
+                // 2. Where the church is, in small letters.
+                if (churchDay in 0 until plan.days.size) {
+                    item {
+                        Text(
+                            stringResource(R.string.plans_church_day, churchDay + 1),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
                     }
+                }
+                // 3. The days: the next few, or all of them, or the ones that match a search. One short line for each day, with the
+                // day the church has planned it for.
+                val searching = query.isNotBlank()
+                val shownDays =
+                    if (searching) plan.days.indices.filter { plan.days[it].contains(query.trim(), ignoreCase = true) || (it + 1).toString() == query.trim() }
+                    else if (showAll) plan.days.indices.toList()
+                    else ((next + 1)..(next + 3)).filter { it < plan.days.size }
+                item {
+                    if (searchOpen) {
+                        SearchField(query = query, onQuery = { query = it }, onClose = { searchOpen = false })
+                    } else {
+                        Row(Modifier.fillMaxWidth().padding(top = 4.dp, start = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                stringResource(if (showAll) R.string.plans_all_days else R.string.plans_coming_up),
+                                style = MaterialTheme.typography.titleMedium,
+                                modifier = Modifier.weight(1f)
+                            )
+                            SearchIconButton(onClick = { searchOpen = true })
+                        }
+                    }
+                }
+                if (searching && shownDays.isEmpty()) {
+                    item {
+                        Text(
+                            stringResource(R.string.search_none, query.trim()),
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(horizontal = 4.dp)
+                        )
+                    }
+                }
+                items(shownDays, key = { "d$it" }) { index ->
+                    PlanDayRow(
+                        index = index,
+                        reading = plan.days[index],
+                        date = plannedDate(plan, index),
+                        isNext = index == next && !finished,
+                        done = index in state.done,
+                        reflected = index in state.reflected,
+                        onToggle = { vm.toggleDay(index) },
+                        onRead = { onRead(plan.days[index], index) },
+                        onReflect = { onReflect(plan.days[index], index) },
+                        onContinue = { vm.continueFrom(index) }
+                    )
+                }
+                if (!searching && plan.days.size > 4) {
+                    item {
+                        TextButton(onClick = { showAll = !showAll }) {
+                            Text(stringResource(if (showAll) R.string.plans_show_less else R.string.plans_show_all) + "  (" + plan.days.size + ")")
+                        }
+                    }
+                }
+                // 4. For leaders: how everyone is doing.
+                if (isAdmin && state.everyone.isNotEmpty()) {
+                    item {
+                        Text(
+                            stringResource(R.string.plans_for_leaders),
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier.padding(top = 8.dp, start = 4.dp)
+                        )
+                    }
+                    item { EveryoneCard(plan, state.everyone) }
                 }
             }
         }
@@ -279,7 +386,7 @@ private fun EveryoneCard(plan: ReadingPlan, people: List<PlanPerson>) {
         Column(Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(stringResource(R.string.plans_everyone), style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp))
             if (people.any { quiet(it) }) {
-                Text(stringResource(R.string.plans_quiet_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+                InfoHint(stringResource(R.string.plans_quiet_hint))
             }
             people.forEach { person ->
                 val percent = if (plan.days.isEmpty()) 0 else person.done * 100 / plan.days.size
@@ -381,4 +488,62 @@ private fun PlanForm(onSave: (String, Date, List<String>) -> Unit, onDismiss: ()
             dismissButton = { TextButton(onClick = { showPicker = false }) { Text(stringResource(R.string.cancel)) } }
         ) { DatePicker(state = pickerState) }
     }
+}
+
+/** One day of the plan, in one short line: tick it, tap it to read it; the three dots offer Read, Reflect and Continue from here. */
+@Composable
+private fun PlanDayRow(
+    index: Int,
+    reading: String,
+    date: String,
+    isNext: Boolean,
+    done: Boolean,
+    reflected: Boolean,
+    onToggle: () -> Unit,
+    onRead: () -> Unit,
+    onReflect: () -> Unit,
+    onContinue: () -> Unit
+) {
+    var menu by remember { mutableStateOf(false) }
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .background(if (isNext) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.6f) else androidx.compose.ui.graphics.Color.Transparent)
+            .clickable(onClick = onRead)
+            .padding(start = 4.dp, top = 2.dp, bottom = 2.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Checkbox(checked = done, onCheckedChange = { onToggle() })
+        Column(Modifier.weight(1f)) {
+            Text(
+                stringResource(R.string.plans_day, index + 1) + "  \u00B7  " + date,
+                style = MaterialTheme.typography.labelMedium,
+                color = if (isNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Text(reading, style = MaterialTheme.typography.bodyLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+        Box {
+            IconButton(onClick = { menu = true }) { Icon(Icons.Filled.MoreVert, contentDescription = null) }
+            DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                DropdownMenuItem(text = { Text(stringResource(R.string.plans_read_it)) }, onClick = { menu = false; onRead() })
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.plans_reflect) + if (reflected) "  \u2713" else "") },
+                    onClick = { menu = false; onReflect() }
+                )
+                if (!done) {
+                    DropdownMenuItem(text = { Text(stringResource(R.string.plans_continue_here)) }, onClick = { menu = false; onContinue() })
+                }
+            }
+        }
+    }
+}
+
+/** The day the church has planned a day of the plan for, for example "Thu 23 Oct" (the plan starts on its start date). */
+private fun plannedDate(plan: ReadingPlan, index: Int): String {
+    val day = java.util.Calendar.getInstance().apply {
+        time = plan.startDate
+        add(java.util.Calendar.DAY_OF_YEAR, index)
+    }
+    return java.text.SimpleDateFormat("EEE d MMM", java.util.Locale.getDefault()).format(day.time)
 }

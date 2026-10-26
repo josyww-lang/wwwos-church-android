@@ -486,7 +486,6 @@ private fun MainScaffold(auth: AuthState, authVm: AuthViewModel) {
     }
 }
 
-
 /** The soft colour behind the open tab's icon: a different one for each tab. */
 private fun tabPill(tab: Tab, dark: Boolean, home: Color): Color = when (tab) {
     Tab.Home -> home

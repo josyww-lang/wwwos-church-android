@@ -67,6 +67,7 @@ import org.yourchurch.app.data.Prayer
 import org.yourchurch.app.data.PrayersViewModel
 import org.yourchurch.app.ui.chat.formatWhen
 import org.yourchurch.app.ui.common.EditedTag
+import org.yourchurch.app.ui.common.InfoHint
 import org.yourchurch.app.ui.common.PersonAvatar
 import org.yourchurch.app.ui.common.SkeletonCards
 
@@ -304,11 +305,7 @@ private fun PrayerForm(uid: String, myName: String, vm: PrayersViewModel, onDism
                     Switch(checked = anonymous, onCheckedChange = { anonymous = it }, enabled = !saving)
                 }
                 if (anonymous) {
-                    Text(
-                        stringResource(R.string.prayer_anonymous_note),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
+                    InfoHint(stringResource(R.string.prayer_anonymous_note))
                 }
                 Text(stringResource(R.string.prayer_audience), style = MaterialTheme.typography.titleSmall)
                 listOf(false to R.string.prayer_audience_church, true to R.string.prayer_audience_leaders)
@@ -355,7 +352,6 @@ private fun PrayerForm(uid: String, myName: String, vm: PrayersViewModel, onDism
     )
 }
 
-
 @Composable
 private fun PrayerEditDialog(initial: String, onSave: (String) -> Unit, onDismiss: () -> Unit) {
     var value by remember { mutableStateOf(initial) }
@@ -379,7 +375,6 @@ private fun PrayerEditDialog(initial: String, onSave: (String) -> Unit, onDismis
         dismissButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } }
     )
 }
-
 
 @Composable
 private fun ReactionChip(text: String, selected: Boolean, modifier: Modifier, onClick: () -> Unit) {

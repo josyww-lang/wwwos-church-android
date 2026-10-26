@@ -52,6 +52,7 @@ import org.yourchurch.app.R
 import org.yourchurch.app.data.ChatMessage
 import org.yourchurch.app.data.ScheduledMessage
 import org.yourchurch.app.data.snippetOf
+import org.yourchurch.app.ui.common.InfoHint
 
 /** Make a poll: a question and two to six options. */
 @Composable
@@ -163,7 +164,7 @@ fun ChatSearchDialog(messages: List<ChatMessage>, onPick: (String) -> Unit, onDi
                         }
                     }
                 }
-                Text(stringResource(R.string.chat_search_note), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                InfoHint(stringResource(R.string.chat_search_note))
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } }
@@ -186,7 +187,7 @@ fun ScheduleDialog(onSchedule: (Date) -> Unit, onDismiss: () -> Unit) {
         title = { Text(stringResource(R.string.chat_schedule_title)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Text(stringResource(R.string.chat_schedule_hint), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                InfoHint(stringResource(R.string.chat_schedule_hint), style = MaterialTheme.typography.bodyMedium)
                 OutlinedButton(
                     onClick = {
                         android.app.DatePickerDialog(

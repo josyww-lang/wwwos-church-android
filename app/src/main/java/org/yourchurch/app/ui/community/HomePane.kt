@@ -1,5 +1,7 @@
 package org.yourchurch.app.ui.community
 
+import org.yourchurch.app.data.ServingSlot
+import org.yourchurch.app.data.ServingViewModel
 import androidx.annotation.StringRes
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.ExperimentalFoundationApi
@@ -31,7 +33,6 @@ import androidx.compose.material.icons.outlined.Directions
 import androidx.compose.material.icons.outlined.Event
 import androidx.compose.material.icons.outlined.Favorite
 import androidx.compose.material.icons.outlined.PlayCircle
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -86,13 +87,9 @@ import org.yourchurch.app.R
 import org.yourchurch.app.data.AnnouncementsViewModel
 import org.yourchurch.app.data.ChurchInfoViewModel
 import org.yourchurch.app.data.EventsViewModel
-import org.yourchurch.app.data.PlansState
 import org.yourchurch.app.data.PlansViewModel
-import org.yourchurch.app.data.ReadingPlan
 import org.yourchurch.app.data.VerseViewModel
-import org.yourchurch.app.data.daysSince
 import org.yourchurch.app.data.nextDayOf
-import org.yourchurch.app.data.readingStreak
 import org.yourchurch.app.ui.common.ChatCircleIcon
 import org.yourchurch.app.ui.common.CrossIcon
 import org.yourchurch.app.ui.theme.ToneKind
@@ -133,6 +130,7 @@ fun HomePane(
     /** How many new things are waiting in each section (key: news, events, sermons, serve, pray). */
     badges: Map<String, Int> = emptyMap(),
     plansVm: PlansViewModel = viewModel(key = "plans-$uid"),
+    servingVm: ServingViewModel = viewModel(key = "serving-$uid"),
     verseVm: VerseViewModel = viewModel(key = "verse"),
     infoVm: ChurchInfoViewModel = viewModel(key = "church-$uid"),
     eventsVm: EventsViewModel = viewModel(key = "events-$uid"),
@@ -143,6 +141,9 @@ fun HomePane(
     val info = infoVm.state.collectAsStateWithLifecycle().value.info
     val events = eventsVm.state.collectAsStateWithLifecycle().value
     val announcements = announcementsVm.state.collectAsStateWithLifecycle().value
+    // The next duty of this person (assigned by a leader, or signed up for) in the next two weeks, unless they said they cannot come.
+    val serving = servingVm.state.collectAsStateWithLifecycle().value
+    val nextServing = serving.slots.firstOrNull { uid in it.volunteers && uid !in it.cantMake && it.start.time - System.currentTimeMillis() < 14L * 24 * 3600 * 1000 }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { announcementsVm.start() }
     LaunchedEffect(Unit) { Favorites.load(context) }
 
@@ -279,6 +280,9 @@ fun HomePane(
                 }
             }
 
+            // Only for people who serve soon: what and when. Tap to open the schedule.
+            nextServing?.let { NextServingCard(it, onClick = { onNavigate(HomeTarget.Serve) }) }
+
             // Shortcuts (press and hold to change them): rows of four
             Favorites.keys.mapNotNull { key -> SHORTCUTS[key]?.let { key to it } }.chunked(4).forEach { rowOfTiles ->
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -314,21 +318,6 @@ fun HomePane(
                         detail = today.message,
                         minHeight = cardMin,
                         onClick = { onNavigate(HomeTarget.Announcements) }
-                    )
-                }
-            }
-
-            // The next Bible reading: the first day of the plan this person has not read (the plan waits if they stop)
-            plansState.plan?.let { plan ->
-                val next = nextDayOf(plansState.done, plansState.from, plan.days.size)
-                if (next < plan.days.size) {
-                    ReadingCard(
-                        plan = plan,
-                        index = next,
-                        state = plansState,
-                        minHeight = cardMin,
-                        onToggle = { plansVm.toggleDay(next) },
-                        onClick = { onNavigate(HomeTarget.Reading) }
                     )
                 }
             }
@@ -369,7 +358,6 @@ fun HomePane(
         )
     }
 }
-
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -540,53 +528,6 @@ private fun EventCard(event: org.yourchurch.app.data.Event?, minHeight: Dp, onCl
     }
 }
 
-
-/** Today's reading from the plan, with a button to tick it off. Tapping the card opens the plan. */
-@Composable
-private fun ReadingCard(plan: ReadingPlan, index: Int, state: PlansState, minHeight: Dp, onToggle: () -> Unit, onClick: () -> Unit) {
-    val readToday = java.time.LocalDate.now().toString() in state.activeDays
-    val away = state.done.isNotEmpty() && (state.lastReadAt?.let { daysSince(it) >= 3 } == true)
-    val streak = readingStreak(state.activeDays)
-    Card(
-        onClick = onClick,
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = lerp(MaterialTheme.colorScheme.surface, MaterialTheme.colorScheme.primaryContainer, 0.5f)),
-        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp, pressedElevation = 1.dp),
-        border = BorderStroke(0.5.dp, MaterialTheme.colorScheme.outline),
-        modifier = Modifier.fillMaxWidth()
-    ) {
-        Column(
-            modifier = Modifier.fillMaxWidth().heightIn(min = minHeight).padding(horizontal = 20.dp, vertical = 16.dp),
-            verticalArrangement = Arrangement.Center
-        ) {
-            // "Welcome back" when the person has stopped for a few days: the plan waited for them.
-            Text(
-                stringResource(if (away) R.string.reading_welcome_back else R.string.reading_next).uppercase(),
-                style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.primary
-            )
-            Text(plan.days[index], style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp), maxLines = 2, overflow = TextOverflow.Ellipsis)
-            Text(
-                plan.title + "  \u00B7  " + stringResource(R.string.plans_day, index + 1),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 8.dp)) {
-                Text(
-                    stringResource(R.string.reading_progress_pct, state.done.size, plan.days.size, if (plan.days.isEmpty()) 0 else state.done.size * 100 / plan.days.size) +
-                        (if (readToday) "  \u00B7  " + stringResource(R.string.reading_read_today) else "") +
-                        (if (streak > 1) "  \u00B7  " + stringResource(R.string.reading_streak, streak) else ""),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.weight(1f)
-                )
-                Button(onClick = onToggle) { Text(stringResource(R.string.reading_mark)) }
-            }
-        }
-    }
-}
-
-
 private class ComingItem(val isEvent: Boolean, val id: String, val title: String, val time: Long)
 
 /** One planned announcement or event, with its icon, the date and the title. */
@@ -618,6 +559,32 @@ private fun ComingUpCard(item: ComingItem, onClick: () -> Unit) {
                 Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(item.title, style = MaterialTheme.typography.titleMedium, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
+        }
+    }
+}
+
+/** "You serve next": the duty, the day and the time. */
+@Composable
+private fun NextServingCard(slot: ServingSlot, onClick: () -> Unit) {
+    val whenText = java.text.SimpleDateFormat("EEE d MMM, HH:mm", java.util.Locale.getDefault()).format(slot.start)
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(18.dp))
+            .background(MaterialTheme.colorScheme.primaryContainer)
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 14.dp),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(Icons.Outlined.Favorite, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimaryContainer)
+        Spacer(Modifier.width(12.dp))
+        Column(Modifier.weight(1f)) {
+            Text(stringResource(R.string.home_serving_next), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onPrimaryContainer)
+            Text(
+                slot.title + "  \u00B7  " + whenText,
+                style = MaterialTheme.typography.titleMedium,
+                color = MaterialTheme.colorScheme.onPrimaryContainer
+            )
         }
     }
 }

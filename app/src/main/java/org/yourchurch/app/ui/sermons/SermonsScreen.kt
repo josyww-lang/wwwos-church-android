@@ -313,7 +313,6 @@ private fun SermonCard(sermon: Sermon, onClick: () -> Unit) {
     }
 }
 
-
 @Composable
 private fun MonthHeader(month: YearMonth) {
     Text(

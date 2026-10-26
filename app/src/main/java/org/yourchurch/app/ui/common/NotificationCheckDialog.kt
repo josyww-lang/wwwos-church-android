@@ -128,11 +128,7 @@ fun NotificationCheckDialog(uid: String, onDismiss: () -> Unit) {
                     onClick = { Notifications.show(context, testTitle, testBody, roomId = "test") },
                     modifier = Modifier.fillMaxWidth()
                 ) { Text(stringResource(R.string.notif_check_test)) }
-                Text(
-                    stringResource(R.string.notif_check_hint),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                InfoHint(stringResource(R.string.notif_check_hint))
             }
         },
         confirmButton = { TextButton(onClick = onDismiss) { Text(stringResource(R.string.close)) } }

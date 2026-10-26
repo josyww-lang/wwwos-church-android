@@ -46,6 +46,7 @@ import kotlinx.coroutines.launch
 import org.yourchurch.app.R
 import org.yourchurch.app.data.LiveInfo
 import org.yourchurch.app.data.LiveViewModel
+import org.yourchurch.app.ui.common.InfoHint
 
 /**
  * A red "LIVE NOW" banner on Home while the service is streaming (nothing is shown the rest of the time).
@@ -119,11 +120,7 @@ internal fun LiveSettingsDialog(info: LiveInfo, vm: LiveViewModel, onDismiss: ()
         title = { Text(stringResource(R.string.live_settings)) },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    stringResource(R.string.live_help),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                InfoHint(stringResource(R.string.live_help))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(stringResource(R.string.live_show), modifier = Modifier.weight(1f))
                     Switch(checked = live, onCheckedChange = { live = it })

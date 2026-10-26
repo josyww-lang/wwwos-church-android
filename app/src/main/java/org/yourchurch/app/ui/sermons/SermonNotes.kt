@@ -30,6 +30,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.tasks.await
 import org.yourchurch.app.R
 import org.yourchurch.app.ui.chat.formatDuration
+import org.yourchurch.app.ui.common.InfoHint
 
 /**
  * Notes only the person can see, kept for each sermon. They save by themselves a moment after typing stops, and
@@ -73,11 +74,7 @@ fun SermonNotes(sermonId: String, uid: String) {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text(stringResource(R.string.notes_title), style = MaterialTheme.typography.titleMedium)
-            Text(
-                stringResource(R.string.notes_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            InfoHint(stringResource(R.string.notes_hint))
             OutlinedTextField(
                 value = text,
                 onValueChange = { text = it.take(5000) },

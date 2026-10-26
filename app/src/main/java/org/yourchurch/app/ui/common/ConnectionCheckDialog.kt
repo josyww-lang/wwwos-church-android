@@ -79,7 +79,7 @@ fun ConnectionCheckDialog(onDismiss: () -> Unit) {
         title = { Text(stringResource(R.string.cc_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(stringResource(R.string.cc_hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                InfoHint(stringResource(R.string.cc_hint))
                 val shown = lines
                 if (shown == null) {
                     CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)

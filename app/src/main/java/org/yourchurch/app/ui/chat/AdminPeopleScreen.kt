@@ -59,6 +59,7 @@ import org.yourchurch.app.data.ChatState
 import org.yourchurch.app.data.ChatViewModel
 import org.yourchurch.app.data.PersonRow
 import org.yourchurch.app.ui.common.PersonAvatar
+import org.yourchurch.app.ui.common.TitleWithInfo
 
 /** Admin only: approve people for chat, and review reported messages. */
 @Composable
@@ -113,13 +114,8 @@ fun AdminPeopleScreen(
                             verticalAlignment = Alignment.CenterVertically,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
-                            Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                            TitleWithInfo(hint = stringResource(R.string.dm_setting_text), modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                                 Text(stringResource(R.string.dm_setting_title), style = MaterialTheme.typography.titleMedium)
-                                Text(
-                                    stringResource(R.string.dm_setting_text),
-                                    style = MaterialTheme.typography.bodySmall,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
                             }
                             Switch(checked = state.dmEnabled, onCheckedChange = { vm.setDmEnabled(it) })
                         }

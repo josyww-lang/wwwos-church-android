@@ -55,7 +55,6 @@ class ChatRepository(private val db: FirebaseFirestore = FirebaseFirestore.getIn
     fun observeMyRooms(uid: String) =
         queryFlow(rooms.whereArrayContains("memberIds", uid)) { it.toRoom() }
 
-
     fun observeDirectory() =
         queryFlow(approved.limit(500)) { DirectoryMember(it.id, it.getString("name") ?: "") }
 

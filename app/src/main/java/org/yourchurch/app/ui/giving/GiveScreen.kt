@@ -310,5 +310,4 @@ private fun GivingEditScreen(
     }
 }
 
-
 /** Anyone can send the leaders a message here. Their name and account are not saved with it. */

@@ -75,21 +75,11 @@ fun NotificationSettingsDialog(uid: String, onCheckPhone: () -> Unit, onDismiss:
                 ToggleRow(stringResource(R.string.notif_type_reminders), reminders) { reminders = it }
                 ToggleRow(stringResource(R.string.notif_type_sermons), sermons) { sermons = it }
                 ToggleRow(stringResource(R.string.notif_type_giving), giving) { giving = it }
-                ToggleRow(stringResource(R.string.notif_type_verse), verse) { verse = it }
-                Text(
-                    stringResource(R.string.notif_type_verse_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                ToggleRow(stringResource(R.string.notif_type_verse), verse, hint = stringResource(R.string.notif_type_verse_desc)) { verse = it }
                 ToggleRow(stringResource(R.string.notif_type_live), live) { live = it }
 
                 Spacer(Modifier.height(12.dp))
-                ToggleRow(stringResource(R.string.notif_quiet), quietOn) { quietOn = it }
-                Text(
-                    stringResource(R.string.notif_quiet_desc),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+                ToggleRow(stringResource(R.string.notif_quiet), quietOn, hint = stringResource(R.string.notif_quiet_desc)) { quietOn = it }
                 Spacer(Modifier.height(8.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     HourPicker(stringResource(R.string.notif_quiet_from), quietFrom, quietOn) { quietFrom = it }
@@ -111,12 +101,16 @@ fun NotificationSettingsDialog(uid: String, onCheckPhone: () -> Unit, onDismiss:
 }
 
 @Composable
-private fun ToggleRow(label: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+private fun ToggleRow(label: String, checked: Boolean, hint: String? = null, onChange: (Boolean) -> Unit) {
     Row(
         modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
         verticalAlignment = Alignment.CenterVertically
     ) {
-        Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        if (hint != null) {
+            TitleWithInfo(hint = hint, modifier = Modifier.weight(1f).padding(end = 12.dp)) { Text(label, style = MaterialTheme.typography.bodyLarge) }
+        } else {
+            Text(label, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f).padding(end = 12.dp))
+        }
         Switch(checked = checked, onCheckedChange = onChange)
     }
 }

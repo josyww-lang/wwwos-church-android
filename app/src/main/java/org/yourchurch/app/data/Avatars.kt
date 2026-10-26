@@ -58,28 +58,6 @@ object AvatarStore {
         }
     }
 
-    /** Shrinks the picked picture and saves it as the person's profile picture. Returns true on success. */
-    suspend fun uploadFromUri(context: Context, uid: String, uri: Uri): Boolean {
-        val bytes = withContext(Dispatchers.Default) { prepareAvatarBytes(context.applicationContext, uri) }
-            ?: return false
-        val bitmap = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size) }
-            ?: return false
-        return try {
-            withTimeout(20_000) {
-                db.collection("avatars").document(uid)
-                    .set(mapOf("photo" to Blob.fromBytes(bytes), "updatedAt" to FieldValue.serverTimestamp()))
-                    .await()
-            }
-            checked.add(uid)
-            bitmaps[uid] = bitmap
-            true
-        } catch (e: CancellationException) {
-            throw e
-        } catch (e: Exception) {
-            false
-        }
-    }
-
     /** Loads a picked photo upright (at most about 1,200 pixels on its longest side) so the person can move and zoom it first. */
     suspend fun loadForCrop(context: Context, uri: Uri): Bitmap? =
         withContext(Dispatchers.Default) { loadUprightBitmap(context.applicationContext, uri, 1200) }
@@ -123,65 +101,6 @@ object AvatarStore {
         checked.clear()
     }
 }
-
-/**
- * Turns a picked photo into a small square JPEG: loads a reduced copy, fixes the rotation,
- * crops the middle square, scales it down and compresses it. Returns null if it can't.
- */
-private fun prepareAvatarBytes(context: Context, uri: Uri): ByteArray? = runCatching {
-    val resolver = context.contentResolver
-
-    // 1. Find out how big the picture is, without loading it.
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    resolver.openInputStream(uri)?.use { BitmapFactory.decodeStream(it, null, bounds) }
-    if (bounds.outWidth <= 0 || bounds.outHeight <= 0) return@runCatching null
-
-    // 2. Load a reduced copy instead of the full-size photo.
-    var sample = 1
-    while (minOf(bounds.outWidth, bounds.outHeight) / (sample * 2) >= AVATAR_SIZE * 2) sample *= 2
-    val loaded = resolver.openInputStream(uri)?.use {
-        BitmapFactory.decodeStream(it, null, BitmapFactory.Options().apply { inSampleSize = sample })
-    } ?: return@runCatching null
-
-    // 3. Phones often store photos sideways and record the turn in the file. Apply it.
-    val orientation = resolver.openInputStream(uri)?.use {
-        ExifInterface(it).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-    } ?: ExifInterface.ORIENTATION_NORMAL
-    val matrix = Matrix()
-    when (orientation) {
-        ExifInterface.ORIENTATION_ROTATE_90 -> matrix.postRotate(90f)
-        ExifInterface.ORIENTATION_ROTATE_180 -> matrix.postRotate(180f)
-        ExifInterface.ORIENTATION_ROTATE_270 -> matrix.postRotate(270f)
-        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> matrix.postScale(-1f, 1f)
-        ExifInterface.ORIENTATION_FLIP_VERTICAL -> matrix.postScale(1f, -1f)
-    }
-    val upright = Bitmap.createBitmap(loaded, 0, 0, loaded.width, loaded.height, matrix, true)
-
-    // 4. Crop the middle square, scale it down, and put it on white (JPEG has no transparency).
-    val side = minOf(upright.width, upright.height)
-    val square = Bitmap.createBitmap(upright, (upright.width - side) / 2, (upright.height - side) / 2, side, side)
-    val result = Bitmap.createBitmap(AVATAR_SIZE, AVATAR_SIZE, Bitmap.Config.ARGB_8888)
-    val canvas = Canvas(result)
-    canvas.drawColor(Color.WHITE)
-    canvas.drawBitmap(
-        square,
-        Rect(0, 0, side, side),
-        Rect(0, 0, AVATAR_SIZE, AVATAR_SIZE),
-        Paint(Paint.FILTER_BITMAP_FLAG)
-    )
-
-    // 5. Compress, using lower quality if it is still too big.
-    var quality = 85
-    var data = ByteArray(0)
-    do {
-        val stream = ByteArrayOutputStream()
-        result.compress(Bitmap.CompressFormat.JPEG, quality, stream)
-        data = stream.toByteArray()
-        quality -= 15
-    } while (data.size > MAX_AVATAR_BYTES && quality > 20)
-
-    if (data.size > MAX_AVATAR_BYTES) null else data
-}.getOrNull()
 
 /** Loads a picked photo with the right side up, shrunk so that its longest side is about [maxSide] pixels. */
 private fun loadUprightBitmap(context: Context, uri: Uri, maxSide: Int): Bitmap? = runCatching {

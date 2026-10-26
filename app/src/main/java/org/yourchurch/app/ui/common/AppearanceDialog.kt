@@ -156,11 +156,7 @@ fun AppearanceDialog(onDismiss: () -> Unit, isAdmin: Boolean = false) {
                         FilterChip(selected = forChurch, onClick = { forChurch = true }, label = { Text(stringResource(R.string.appearance_for_church)) })
                     }
                     if (forChurch) {
-                        Text(
-                            stringResource(R.string.appearance_church_hint),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                        InfoHint(stringResource(R.string.appearance_church_hint))
                     }
                 }
                 if (!forChurch) {
@@ -298,13 +294,8 @@ fun AppearanceDialog(onDismiss: () -> Unit, isAdmin: Boolean = false) {
                 }
                 if (showMore) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Column(Modifier.weight(1f).padding(end = 12.dp)) {
+                        TitleWithInfo(hint = stringResource(R.string.appearance_sections_desc), modifier = Modifier.weight(1f).padding(end = 12.dp)) {
                             Text(stringResource(R.string.appearance_sections), style = MaterialTheme.typography.titleSmall)
-                            Text(
-                                stringResource(R.string.appearance_sections_desc),
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
                         }
                         Switch(checked = ThemeSettings.colorful, onCheckedChange = { ThemeSettings.setColorful(context, it) })
                     }
@@ -431,11 +422,10 @@ private fun GradientSlider(fraction: Float, thumbColor: Color, brush: Brush, onF
 @Composable
 private fun Section(title: String, hint: String? = null, content: @Composable () -> Unit) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-        Column {
+        if (hint != null) {
+            TitleWithInfo(hint = hint) { Text(title, style = MaterialTheme.typography.titleMedium) }
+        } else {
             Text(title, style = MaterialTheme.typography.titleMedium)
-            if (hint != null) {
-                Text(hint, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
         }
         content()
     }

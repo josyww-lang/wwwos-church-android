@@ -74,6 +74,7 @@ import org.yourchurch.app.ui.common.LanguageDialog
 import org.yourchurch.app.ui.common.NotificationCheckDialog
 import org.yourchurch.app.ui.common.NotificationSettingsDialog
 import org.yourchurch.app.ui.common.SearchUi
+import org.yourchurch.app.ui.common.TitleWithInfo
 import org.yourchurch.app.ui.common.WhatsNewDialog
 import org.yourchurch.app.ui.giving.GiveScreen
 import org.yourchurch.app.ui.theme.ToneKind
@@ -287,9 +288,8 @@ private fun MoreSwitchRow(
                 Icon(icon, contentDescription = null, tint = colors.accent)
             }
             Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f).padding(end = 8.dp)) {
+            TitleWithInfo(hint = stringResource(hint), modifier = Modifier.weight(1f).padding(end = 8.dp)) {
                 Text(stringResource(label), style = MaterialTheme.typography.titleMedium)
-                Text(stringResource(hint), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Switch(checked = checked, onCheckedChange = null)
         }

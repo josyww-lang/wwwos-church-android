@@ -316,6 +316,7 @@ fun ChurchTheme(content: @Composable () -> Unit) {
     }
     // The "Text size" choice (Appearance) scales every text in the app.
     val context = LocalContext.current
+    // Loads the saved text size once. (A remember must give back a value, so it ends with true.)
     remember(context) {
         TextSize.load(context)
         true

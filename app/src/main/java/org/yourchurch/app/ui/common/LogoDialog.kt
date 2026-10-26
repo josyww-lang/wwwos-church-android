@@ -56,12 +56,7 @@ fun LogoDialog(onDismiss: () -> Unit) {
                 modifier = Modifier.fillMaxWidth()
             ) {
                 ChurchLogo(size = 96.dp)
-                Text(
-                    stringResource(R.string.logo_hint),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center
-                )
+                InfoHint(stringResource(R.string.logo_hint), textAlign = TextAlign.Center, style = MaterialTheme.typography.bodyMedium)
                 if (busy) CircularProgressIndicator(modifier = Modifier.size(24.dp), strokeWidth = 2.dp)
                 message?.let {
                     Text(

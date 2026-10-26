@@ -298,7 +298,6 @@ fun ComposeScreen(
     }
 }
 
-
 /** A small drop-down for picking a number, used for the hour and minute of a scheduled announcement. */
 @Composable
 private fun NumberDropdown(label: String, value: Int, choices: List<Int>, onChange: (Int) -> Unit) {

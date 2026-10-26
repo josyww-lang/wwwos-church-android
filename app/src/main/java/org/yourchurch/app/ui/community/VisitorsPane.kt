@@ -109,7 +109,6 @@ fun VisitorsPane(
     }
 }
 
-
 /** The welcome text that people see on the "I'm new here" page, in three languages. */
 @Composable
 private fun NewHereDialog(info: ChurchInfo, onSave: suspend (ChurchInfo) -> Result<Unit>, onDismiss: () -> Unit) {

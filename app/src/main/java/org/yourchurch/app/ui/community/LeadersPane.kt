@@ -38,6 +38,8 @@ import java.util.Locale
 import org.yourchurch.app.R
 import org.yourchurch.app.data.LeaderRow
 import org.yourchurch.app.data.LeadersAdminViewModel
+import org.yourchurch.app.ui.common.InfoHint
+import org.yourchurch.app.ui.common.TitleWithInfo
 
 private fun shortDate(date: Date): String = DateFormat.getDateInstance(DateFormat.MEDIUM, Locale.getDefault()).format(date)
 
@@ -56,12 +58,7 @@ fun LeadersPane(isOwner: Boolean, vm: LeadersAdminViewModel = viewModel(key = "l
         modifier = Modifier.fillMaxSize()
     ) {
         item {
-            Text(
-                stringResource(R.string.roles_hint),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(bottom = 4.dp)
-            )
+            InfoHint(stringResource(R.string.roles_hint), modifier = Modifier.padding(bottom = 4.dp), style = MaterialTheme.typography.bodyMedium)
         }
         if (rows.isEmpty()) {
             item { Text(stringResource(R.string.leaders_empty), style = MaterialTheme.typography.bodyLarge) }
@@ -103,11 +100,12 @@ fun LeadersPane(isOwner: Boolean, vm: LeadersAdminViewModel = viewModel(key = "l
 private fun RoleOption(selected: Boolean, enabled: Boolean, title: String, description: String?, onClick: () -> Unit) {
     Row(verticalAlignment = Alignment.Top) {
         RadioButton(selected = selected, enabled = enabled, onClick = onClick)
-        Column(Modifier.padding(top = 12.dp, start = 4.dp)) {
-            Text(title, style = MaterialTheme.typography.titleSmall)
-            if (description != null) {
-                Text(description, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (description != null) {
+            TitleWithInfo(hint = description, modifier = Modifier.padding(top = 4.dp, start = 4.dp)) {
+                Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(vertical = 10.dp))
             }
+        } else {
+            Text(title, style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(top = 12.dp, start = 4.dp))
         }
     }
 }

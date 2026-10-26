@@ -521,7 +521,6 @@ private fun SectionTitle(text: String) {
     )
 }
 
-
 @Composable
 private fun RoomCard(
     room: ChatRoom,

@@ -1255,7 +1255,6 @@ private fun sameDay(a: Date?, b: Date?): Boolean {
 /** How far a message you sent has got. */
 internal enum class MessageStatus { Sending, Sent, Seen }
 
-
 /** The bar above the message box while changing a message. */
 @Composable
 private fun EditBar(onCancel: () -> Unit) {
@@ -1278,7 +1277,6 @@ private fun EditBar(onCancel: () -> Unit) {
         }
     }
 }
-
 
 /** Who has seen a message, with the time each of them last opened the conversation after it, and who has not. */
 private class SeenInfo(val seen: List<Pair<String, Date>>, val notYet: List<String>)

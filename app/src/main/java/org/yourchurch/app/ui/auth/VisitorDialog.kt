@@ -58,6 +58,7 @@ import org.yourchurch.app.LocaleManager
 import org.yourchurch.app.R
 import org.yourchurch.app.data.ChurchInfoViewModel
 import org.yourchurch.app.data.VisitorsViewModel
+import org.yourchurch.app.ui.common.InfoHint
 import org.yourchurch.app.ui.community.openDialer
 import org.yourchurch.app.ui.community.openDirections
 import org.yourchurch.app.ui.community.openMail
@@ -138,11 +139,7 @@ fun VisitorDialog(onDismiss: () -> Unit) {
                             if (sent) {
                                 Text(stringResource(R.string.visitor_thanks), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.bodyLarge)
                             } else {
-                                Text(
-                                    stringResource(R.string.visitor_form_hint),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                                )
+                                InfoHint(stringResource(R.string.visitor_form_hint), style = MaterialTheme.typography.bodyMedium)
                                 OutlinedTextField(
                                     value = name, onValueChange = { name = it.take(60) }, singleLine = true, enabled = !sending,
                                     label = { Text(stringResource(R.string.visitor_name)) }, modifier = Modifier.fillMaxWidth()

@@ -6,7 +6,11 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -34,6 +38,8 @@ private fun ProfileFields(
     email: String?
 ) {
     val phoneInvalid = phone.isNotBlank() && normalizePhone(phone) == null
+    // Why the phone number is asked, and how to write it, are behind the "i": not shown all the time.
+    var showWhy by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
         OutlinedTextField(
             value = name,
@@ -50,9 +56,14 @@ private fun ProfileFields(
             singleLine = true,
             isError = phoneInvalid,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
-            supportingText = {
-                Text(stringResource(if (phoneInvalid) R.string.err_phone_invalid else R.string.phone_hint))
+            trailingIcon = {
+                IconButton(onClick = { showWhy = !showWhy }) {
+                    Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.profile_info))
+                }
             },
+            supportingText = if (phoneInvalid || showWhy) {
+                { Text(if (phoneInvalid) stringResource(R.string.err_phone_invalid) else stringResource(R.string.phone_why) + " " + stringResource(R.string.phone_hint)) }
+            } else null,
             modifier = Modifier.fillMaxWidthCompat()
         )
         if (!email.isNullOrEmpty()) {
@@ -95,11 +106,6 @@ fun CompleteProfileDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 Text(stringResource(R.string.profile_text_complete))
-                Text(
-                    stringResource(R.string.phone_why),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 ProfileFields(name, { name = it }, phone, { phone = it }, email = null)
             }
         },
@@ -144,11 +150,6 @@ fun EditProfileDialog(
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 ProfilePhotoSection(uid = uid, name = name)
-                Text(
-                    stringResource(R.string.phone_why),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
                 ProfileFields(name, { name = it }, phone, { phone = it }, email = email)
                 ActivityStatusPicker()
                 if (onSignOut != null) {

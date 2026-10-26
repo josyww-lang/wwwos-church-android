@@ -44,14 +44,15 @@ import kotlinx.coroutines.launch
 import org.yourchurch.app.R
 import org.yourchurch.app.data.BibleLink
 import org.yourchurch.app.data.WordViewModel
+import org.yourchurch.app.ui.common.InfoHint
 import org.yourchurch.app.ui.common.SkeletonCards
 
 /**
- * Read: links that open the Afaan Oromoo Bible in another Bible app or website.
- * Leaders add, change and remove them; everyone else just opens them.
+ * Links to other Bible apps or websites. Only leaders see this list (from the button in the books panel of the Bible); they add,
+ * change and remove the links. Members read the Bible in the app.
  */
 @Composable
-fun ReadPane(uid: String, isAdmin: Boolean, vm: WordViewModel, onOpenReader: () -> Unit = {}) {
+fun ReadPane(uid: String, isAdmin: Boolean, vm: WordViewModel) {
     val state by vm.state.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
@@ -67,32 +68,17 @@ fun ReadPane(uid: String, isAdmin: Boolean, vm: WordViewModel, onOpenReader: () 
             verticalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxSize()
         ) {
-            item {
-                WordCard(onClick = onOpenReader) {
-                    Row(Modifier.padding(horizontal = 16.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        WordIcon(Icons.Outlined.MenuBook)
-                        Spacer(Modifier.width(14.dp))
-                        Column(Modifier.weight(1f)) {
-                            Text(stringResource(R.string.reader_open), style = MaterialTheme.typography.titleMedium.copy(fontSize = 19.sp))
-                            Text(
-                                stringResource(R.string.reader_open_hint),
-                                style = MaterialTheme.typography.bodyMedium,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                        Icon(Icons.AutoMirrored.Filled.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-            item {
+            // Members read the Bible in the app, so the links to other Bible apps are only for the leaders (who can add them).
+            if (isAdmin) item {
                 Text(stringResource(R.string.word_bible_title), style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp))
+                InfoHint(stringResource(R.string.word_bible_hint), style = MaterialTheme.typography.bodyMedium)
                 Text(
-                    stringResource(R.string.word_bible_hint),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                    stringResource(R.string.word_links_leaders_only),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
                 )
             }
-            if (state.links.isEmpty()) {
+            if (isAdmin && state.links.isEmpty()) {
                 item {
                     Text(
                         stringResource(if (isAdmin) R.string.word_links_empty_admin else R.string.word_links_empty),
@@ -101,7 +87,7 @@ fun ReadPane(uid: String, isAdmin: Boolean, vm: WordViewModel, onOpenReader: () 
                     )
                 }
             }
-            items(state.links, key = { "l" + it.id }) { link ->
+            items(if (isAdmin) state.links else emptyList(), key = { "l" + it.id }) { link ->
                 WordCard(onClick = { runCatching { context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(link.url))) } }) {
                     Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                         WordIcon(Icons.Outlined.MenuBook)

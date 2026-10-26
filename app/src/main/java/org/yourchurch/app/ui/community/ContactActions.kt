@@ -26,7 +26,6 @@ internal fun openWebsite(context: Context, url: String) {
     open(context, Intent(Intent.ACTION_VIEW, Uri.parse(withScheme)))
 }
 
-
 /** Opens the phone's calendar with this event filled in, ready to save (two hours long unless changed there). */
 internal fun addToCalendar(context: Context, event: org.yourchurch.app.data.Event) {
     val intent = android.content.Intent(android.content.Intent.ACTION_INSERT).apply {

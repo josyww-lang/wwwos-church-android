@@ -72,6 +72,7 @@ import org.yourchurch.app.data.extractYoutubeId
 import org.yourchurch.app.data.sermonLanguageLabel
 import org.yourchurch.app.data.toLocalDate
 import org.yourchurch.app.data.toStartOfDayDate
+import org.yourchurch.app.ui.common.InfoHint
 
 private const val MAX_AUDIO_BYTES = 100L * 1024 * 1024
 
@@ -284,11 +285,7 @@ fun SermonFormScreen(
                 }
             }
 
-            Text(
-                stringResource(R.string.sermon_audio_hint),
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
+            InfoHint(stringResource(R.string.sermon_audio_hint))
 
             OutlinedTextField(
                 value = audioLink, onValueChange = { audioLink = it.take(500) },

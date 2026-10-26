@@ -170,11 +170,7 @@ fun ProfilePhotoSection(uid: String, name: String) {
                 style = MaterialTheme.typography.bodySmall
             )
         }
-        Text(
-            stringResource(R.string.photo_hint),
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant
-        )
+        InfoHint(stringResource(R.string.photo_hint))
     }
 
     cropSource?.let { source ->

@@ -13,7 +13,6 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -27,6 +26,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import org.yourchurch.app.R
+import org.yourchurch.app.ui.common.InfoHint
 
 /** The shortcuts a person has pinned on Home (up to four). Kept on the phone. */
 object Favorites {
@@ -65,12 +65,7 @@ fun FavoritesDialog(options: List<Pair<String, Int>>, onDismiss: () -> Unit) {
         title = { Text(stringResource(R.string.fav_title)) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
-                Text(
-                    stringResource(R.string.fav_hint, Favorites.MAX),
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(bottom = 8.dp)
-                )
+                InfoHint(stringResource(R.string.fav_hint, Favorites.MAX), modifier = Modifier.padding(bottom = 8.dp))
                 options.forEach { (key, @StringRes label) ->
                     val checked = key in selected
                     Row(

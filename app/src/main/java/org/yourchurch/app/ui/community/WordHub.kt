@@ -1,8 +1,13 @@
 package org.yourchurch.app.ui.community
 
-import android.content.Context
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ModalBottomSheet
+import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -26,9 +31,10 @@ import org.yourchurch.app.data.WordViewModel
 import org.yourchurch.app.ui.theme.ToneKind
 
 /**
- * The Study tab (it was the Word tab). Read: open any Bible in another app. Library: folders with lessons, PDFs, audio
+ * The Study tab (it was the Word tab). Bible: the Bible reader, open at once. Library: folders with lessons, PDFs, audio
  * and voice notes. Plans: the reading plan everyone follows. Notes: the person's own private notes.
  */
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WordHub(
     uid: String,
@@ -48,8 +54,9 @@ fun WordHub(
     val context = LocalContext.current
     val language = LocaleManager.languageCode(context)
     val plansVm: PlansViewModel = viewModel(key = "plans-$uid")
-    var readerOpen by rememberSaveable { mutableStateOf(false) }
     var readerTarget by remember { mutableStateOf<String?>(null) }
+    var showLinks by remember { mutableStateOf(false) }      // leaders: the links to other Bible apps
+    var notesFull by remember { mutableStateOf(false) }      // the big sticky note in Notes fills the whole screen
     var readerLang by remember { mutableStateOf<String?>(null) }
     // Opened from a reading plan: which day (counted from 0), so the reader can offer "Mark as read" at the end of a chapter.
     var planDay by remember { mutableStateOf<Int?>(null) }
@@ -61,20 +68,20 @@ fun WordHub(
             readerTarget = pending.ref.takeIf { it.isNotBlank() }
             readerLang = pending.lang
             planDay = null
-            readerOpen = true
             onSectionChange(0)
             PendingReading.request = null
         }
     }
     var noteSeed by remember { mutableStateOf<NoteSeed?>(null) }
-    // Full-screen reading: the top card, the tabs and the bottom bar are hidden, so the text has the whole screen.
-    val readerPrefs = remember { context.getSharedPreferences("reader", Context.MODE_PRIVATE) }
-    var focus by rememberSaveable { mutableStateOf(readerPrefs.getBoolean("focus", true)) }
-    val focusActive = focus && readerOpen && section == 0
-    LaunchedEffect(focusActive) { onFullScreen(focusActive) }
+    // Full-screen reading (the button at the right of the reader's top bar): the top card, the tabs and the bottom bar are hidden,
+    // so the text has the whole screen. It starts normal each time; the Back button leaves it.
+    var focus by rememberSaveable { mutableStateOf(false) }
+    val focusActive = focus && section == 0
+    val chromeHidden = focusActive || (notesFull && section == 3)
+    LaunchedEffect(chromeHidden) { onFullScreen(chromeHidden) }
     DisposableEffect(Unit) { onDispose { onFullScreen(false) } }
     Column(Modifier.fillMaxSize()) {
-        if (!focusActive) {
+        if (!chromeHidden) {
         HubHeader(accountMenu)
         SectionTabs(
             labels = listOf(
@@ -90,39 +97,26 @@ fun WordHub(
         )
         }
         when (section) {
-            0 -> if (readerOpen) {
-                BibleReaderScreen(
-                    language = language,
-                    target = readerTarget,
-                    targetLang = readerLang,
-                    planDay = planDay,
-                    planDone = planDay?.let { it in plansState.done } == true,
-                    onMarkRead = { planDay?.let { plansVm.markRead(it) } },
-                    onTargetUsed = {
-                        readerTarget = null
-                        readerLang = null
-                    },
-                    onClose = {
-                        readerOpen = false
-                        planDay = null
-                    },
-                    onNote = { reference, quote ->
-                        noteSeed = NoteSeed(reference = reference, body = quote + "\n\n")
-                        readerOpen = false
-                        onSectionChange(3)
-                    },
-                    focusMode = focusActive,
-                    onToggleFocus = {
-                        focus = !focus
-                        readerPrefs.edit().putBoolean("focus", focus).apply()
-                    }
-                )
-            } else {
-                ReadPane(uid = uid, isAdmin = isAdmin, vm = vm, onOpenReader = {
-                    planDay = null
-                    readerOpen = true
-                })
-            }
+            // The Bible tab opens the Bible at once (no page in between).
+            0 -> BibleReaderScreen(
+                language = language,
+                target = readerTarget,
+                targetLang = readerLang,
+                planDay = planDay,
+                planDone = planDay?.let { it in plansState.done } == true,
+                onMarkRead = { planDay?.let { plansVm.markRead(it) } },
+                onTargetUsed = {
+                    readerTarget = null
+                    readerLang = null
+                },
+                onNote = { reference, quote ->
+                    noteSeed = NoteSeed(reference = reference, body = quote + "\n\n")
+                    onSectionChange(3)
+                },
+                onOpenLinks = if (isAdmin) ({ showLinks = true }) else null,
+                focusMode = focusActive,
+                onToggleFocus = { focus = !focus }
+            )
             1 -> LibraryPane(uid = uid, isAdmin = isAdmin, canAdd = canAdd, vm = vm)
             2 -> PlansPane(
                 uid = uid,
@@ -133,7 +127,6 @@ fun WordHub(
                     readerTarget = reading
                     readerLang = null
                     planDay = day
-                    readerOpen = true
                     onSectionChange(0)
                 },
                 onReflect = { reading, day ->
@@ -146,14 +139,23 @@ fun WordHub(
                 seed = noteSeed,
                 onSeedHandled = { noteSeed = null },
                 onSavedFromSeed = { day -> plansVm.markReflected(day) },
+                onFullScreen = { notesFull = it },
                 onOpenVerse = { ref ->
                     readerTarget = ref
                     readerLang = null
                     planDay = null
-                    readerOpen = true
                     onSectionChange(0)
                 }
             )
+        }
+    }
+    // Leaders: the links to other Bible apps (opened from the button in the books panel of the Bible).
+    if (showLinks) {
+        ModalBottomSheet(
+            onDismissRequest = { showLinks = false },
+            sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
+        ) {
+            Box(Modifier.fillMaxWidth().fillMaxHeight(0.85f)) { ReadPane(uid = uid, isAdmin = isAdmin, vm = vm) }
         }
     }
 }

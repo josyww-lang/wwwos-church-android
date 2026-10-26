@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -36,15 +37,17 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Folder
 import androidx.compose.material.icons.outlined.Headphones
+import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.Mic
 import androidx.compose.material.icons.outlined.PictureAsPdf
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -93,6 +96,8 @@ fun LibraryPane(uid: String, isAdmin: Boolean, canAdd: Boolean, vm: WordViewMode
     val scope = rememberCoroutineScope()
 
     var folderId by rememberSaveable { mutableStateOf("") }
+    var showFaith by rememberSaveable { mutableStateOf(false) }        // Faith and prayers
+    var showHint by rememberSaveable { mutableStateOf(false) }         // the explanation of the library, behind the "i"
     var showNewFolder by remember { mutableStateOf(false) }
     var renameFolder by remember { mutableStateOf<LibraryFolder?>(null) }
     var renameItem by remember { mutableStateOf<LibraryItem?>(null) }
@@ -129,6 +134,16 @@ fun LibraryPane(uid: String, isAdmin: Boolean, canAdd: Boolean, vm: WordViewMode
     val pickAudio = rememberLauncherForActivityResult(ActivityResultContracts.OpenMultipleDocuments()) { uris -> startUpload(uris) }
     DisposableEffect(Unit) { onDispose { LibraryPlayer.stop() } }
 
+    var searchOpen by rememberSaveable { mutableStateOf(false) }
+    var query by rememberSaveable { mutableStateOf("") }
+    BackHandler(enabled = searchOpen || folderId.isNotEmpty()) {
+        if (searchOpen) {
+            searchOpen = false
+            query = ""
+        } else {
+            folderId = ""
+        }
+    }
     val folder = state.folders.firstOrNull { it.id == folderId }
     // Everything lives inside a folder. Anything added before folders existed is gathered in "Other files", to tidy up.
     val atRoot = folderId.isEmpty()
@@ -139,10 +154,24 @@ fun LibraryPane(uid: String, isAdmin: Boolean, canAdd: Boolean, vm: WordViewMode
     val allItems = state.items + state.pdfs.map {
         LibraryItem(it.id, it.title, "pdf", it.path, it.size, 0, "", it.createdAt, legacy = true)
     }
-    val visible = if (atRoot) emptyList() else allItems.filter { it.folderId == shownFolder }.sortedByDescending { it.createdAt?.time ?: 0L }
-    val lessonsHere = if (atRoot) emptyList() else state.lessons.filter { it.folderId == shownFolder }
+    // A search looks in everything (all the folders); without a search a folder shows its own files.
+    val searching = query.isNotBlank()
+    val found: (String) -> Boolean = { it.contains(query.trim(), ignoreCase = true) }
+    val visible =
+        if (searching) allItems.filter { found(it.title) }.sortedByDescending { it.createdAt?.time ?: 0L }
+        else if (atRoot) emptyList()
+        else allItems.filter { it.folderId == shownFolder }.sortedByDescending { it.createdAt?.time ?: 0L }
+    val lessonsHere =
+        if (searching) state.lessons.filter { found(it.title) }
+        else if (atRoot) emptyList()
+        else state.lessons.filter { it.folderId == shownFolder }
+    val foldersShown = if (searching) state.folders.filter { found(it.name) } else state.folders
     val looseCount = allItems.count { it.folderId == "" } + state.lessons.count { it.folderId == "" }
 
+    if (showFaith) {
+        FaithPane(isAdmin = isAdmin, onBack = { showFaith = false })
+        return
+    }
     if (state.loading) {
         SkeletonCards()
     } else {
@@ -152,24 +181,61 @@ fun LibraryPane(uid: String, isAdmin: Boolean, canAdd: Boolean, vm: WordViewMode
             modifier = Modifier.fillMaxSize()
         ) {
             item {
-                if (folder != null || inOther) {
+                Column {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        IconButton(onClick = { folderId = "" }) {
-                            Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close))
+                        if (folder != null || inOther) {
+                            IconButton(onClick = { folderId = "" }) {
+                                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = stringResource(R.string.close))
+                            }
+                            Text(
+                                folder?.name ?: stringResource(R.string.word_other_files),
+                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                modifier = Modifier.weight(1f)
+                            )
+                        } else {
+                            Text(
+                                stringResource(R.string.word_study),
+                                style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp),
+                                modifier = Modifier.weight(1f)
+                            )
+                            // What the library is: behind the "i", not always on the screen
+                            IconButton(onClick = { showHint = !showHint }) {
+                                Icon(Icons.Outlined.Info, contentDescription = stringResource(R.string.profile_info), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                         }
-                        Text(folder?.name ?: stringResource(R.string.word_other_files), style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp), maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                        // The search button: on the right of the title
+                        SearchIconButton(onClick = {
+                            searchOpen = !searchOpen
+                            if (!searchOpen) query = ""
+                        })
+                        // Leaders and helpers: one "+" with everything they can add here (before, buttons far down the page)
+                        if (canAdd) {
+                            AddMenu(
+                                inFolder = folder != null,
+                                uploading = uploading,
+                                onNewFolder = { showNewFolder = true },
+                                onLesson = { editLesson = Lesson(folderId = folderId) },
+                                onVoice = { showVoice = true },
+                                onPdf = { pickPdf.launch(arrayOf("application/pdf")) },
+                                onAudio = { pickAudio.launch(arrayOf("audio/*")) }
+                            )
+                        }
                         if (isAdmin && folder != null) LeaderMenu(onEdit = { renameFolder = folder }, onDelete = { deleteFolder = folder })
                     }
-                } else {
-                    Column {
-                        Text(stringResource(R.string.word_study), style = MaterialTheme.typography.titleLarge.copy(fontSize = 24.sp))
+                    if (showHint && folder == null && !inOther) {
                         Text(
                             stringResource(R.string.word_study_hint),
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(start = 4.dp, end = 4.dp, bottom = 4.dp)
                         )
                     }
                 }
+            }
+            if (searchOpen) {
+                item { SearchField(query = query, onQuery = { query = it }, onClose = { searchOpen = false }) }
             }
             if (uploading) {
                 item {
@@ -188,9 +254,15 @@ fun LibraryPane(uid: String, isAdmin: Boolean, canAdd: Boolean, vm: WordViewMode
                     )
                 }
             }
-            if (atRoot) {
-                items(state.folders, key = { "f" + it.id }) { f ->
-                    WordCard(onClick = { folderId = f.id }) {
+            // Faith and prayers: the Lord's Prayer, the creeds, what Mekane Yesus believes, the Catechism, the Psalms.
+            if (atRoot && !searching) item(key = "faith-card") { FaithCard(isAdmin = isAdmin, onClick = { showFaith = true }) }
+            if (atRoot || searching) {
+                items(foldersShown, key = { "f" + it.id }) { f ->
+                    WordCard(onClick = {
+                        folderId = f.id
+                        query = ""
+                        searchOpen = false
+                    }) {
                         Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
                             WordIcon(Icons.Outlined.Folder)
                             Spacer(Modifier.width(14.dp))
@@ -211,7 +283,7 @@ fun LibraryPane(uid: String, isAdmin: Boolean, canAdd: Boolean, vm: WordViewMode
                     }
                 }
             }
-            if (atRoot && looseCount > 0) {
+            if (atRoot && !searching && looseCount > 0) {
                 item(key = "other-files") {
                     WordCard(onClick = { folderId = OTHER_FILES }) {
                         Row(Modifier.padding(horizontal = 16.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -230,10 +302,10 @@ fun LibraryPane(uid: String, isAdmin: Boolean, canAdd: Boolean, vm: WordViewMode
                     }
                 }
             }
-            if (visible.isEmpty() && lessonsHere.isEmpty() && (!atRoot || (state.folders.isEmpty() && looseCount == 0))) {
+            if (visible.isEmpty() && lessonsHere.isEmpty() && (if (searching) foldersShown.isEmpty() else (!atRoot || (state.folders.isEmpty() && looseCount == 0)))) {
                 item {
                     Text(
-                        stringResource(if (!atRoot) R.string.word_empty_folder else R.string.word_library_empty),
+                        if (searching) stringResource(R.string.search_none, query.trim()) else stringResource(if (!atRoot) R.string.word_empty_folder else R.string.word_library_empty),
                         style = MaterialTheme.typography.bodyMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -314,45 +386,6 @@ fun LibraryPane(uid: String, isAdmin: Boolean, canAdd: Boolean, vm: WordViewMode
                 }
             }
             // At the top only a folder can be made. Lessons, files, audio and voice notes are added inside a folder.
-            if (canAdd && atRoot) {
-                item {
-                    OutlinedButton(onClick = { showNewFolder = true }, modifier = Modifier.fillMaxWidth()) {
-                        Icon(Icons.Outlined.Folder, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(Modifier.width(8.dp))
-                        Text(stringResource(R.string.word_new_folder))
-                    }
-                }
-            }
-            if (canAdd && folder != null) {
-                item {
-                    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(onClick = { editLesson = Lesson(folderId = folderId) }, modifier = Modifier.weight(1f)) {
-                                Icon(Icons.Outlined.Add, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.word_lesson_new), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            OutlinedButton(onClick = { showVoice = true }, enabled = !uploading, modifier = Modifier.weight(1f)) {
-                                Icon(Icons.Outlined.Mic, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.word_voice_note), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                            OutlinedButton(onClick = { pickPdf.launch(arrayOf("application/pdf")) }, enabled = !uploading, modifier = Modifier.weight(1f)) {
-                                Icon(Icons.Outlined.PictureAsPdf, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.word_upload_pdf), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                            OutlinedButton(onClick = { pickAudio.launch(arrayOf("audio/*")) }, enabled = !uploading, modifier = Modifier.weight(1f)) {
-                                Icon(Icons.Outlined.Headphones, contentDescription = null, modifier = Modifier.size(18.dp))
-                                Spacer(Modifier.width(6.dp))
-                                Text(stringResource(R.string.word_upload_audio), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
-            }
         }
     }
 
@@ -569,6 +602,55 @@ private fun formatSize(bytes: Long): String = when {
     else -> String.format(Locale.getDefault(), "%.1f MB", bytes / (1024.0 * 1024.0))
 }
 
-
 /** The folder that gathers what was added before folders existed. */
 private const val OTHER_FILES = "_other"
+
+/** The "+" in the header of the library: what a leader or helper can add (a new folder; inside a folder: a lesson, a voice note, a PDF, audio). */
+@Composable
+private fun AddMenu(
+    inFolder: Boolean,
+    uploading: Boolean,
+    onNewFolder: () -> Unit,
+    onLesson: () -> Unit,
+    onVoice: () -> Unit,
+    onPdf: () -> Unit,
+    onAudio: () -> Unit
+) {
+    var open by remember { mutableStateOf(false) }
+    Box {
+        IconButton(onClick = { open = true }) { Icon(Icons.Outlined.Add, contentDescription = stringResource(R.string.word_add)) }
+        DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
+            if (!inFolder) {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.word_new_folder)) },
+                    leadingIcon = { Icon(Icons.Outlined.Folder, contentDescription = null) },
+                    onClick = { open = false; onNewFolder() }
+                )
+            } else {
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.word_lesson_new)) },
+                    leadingIcon = { Icon(Icons.Outlined.Add, contentDescription = null) },
+                    onClick = { open = false; onLesson() }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.word_voice_note)) },
+                    leadingIcon = { Icon(Icons.Outlined.Mic, contentDescription = null) },
+                    enabled = !uploading,
+                    onClick = { open = false; onVoice() }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.word_upload_pdf)) },
+                    leadingIcon = { Icon(Icons.Outlined.PictureAsPdf, contentDescription = null) },
+                    enabled = !uploading,
+                    onClick = { open = false; onPdf() }
+                )
+                DropdownMenuItem(
+                    text = { Text(stringResource(R.string.word_upload_audio)) },
+                    leadingIcon = { Icon(Icons.Outlined.Headphones, contentDescription = null) },
+                    enabled = !uploading,
+                    onClick = { open = false; onAudio() }
+                )
+            }
+        }
+    }
+}

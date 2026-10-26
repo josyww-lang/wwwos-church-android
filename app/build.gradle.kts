@@ -8,21 +8,32 @@ plugins {
 
 android {
     namespace = "org.yourchurch.app"
-    compileSdk = 36
+    compileSdk = 34
 
     defaultConfig {
         applicationId = "org.osec.app"
         minSdk = 26
-        targetSdk = 36
-        versionCode = 2
-        versionName = "0.3"
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0"
+        resourceConfigurations += listOf("en", "nb", "no", "om")
     }
 
     buildTypes {
         release {
+            // Makes the app much smaller: unused code and unused pictures are removed, the rest is packed tighter.
+            // Test the release build well before it goes to people (the checklist in SHRINK-NOTES.md).
             isMinifyEnabled = true
             isShrinkResources = true
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+        }
+    }
+    // The app has three languages (English, Norsk, Afaan Oromoo). Without this, every library brings the texts of 80 languages.
+    // Norwegian is written "nb" in the app and "no" in some libraries, so both are kept.
+    bundle {
+        language {
+            // The app has its own language choice: keep every language in every install.
+            enableSplit = false
         }
     }
     compileOptions {
@@ -40,7 +51,6 @@ android {
 dependencies {
     implementation(platform("androidx.compose:compose-bom:2024.09.03"))
     implementation("androidx.compose.ui:ui")
-    implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.activity:activity-compose:1.9.2")
@@ -53,12 +63,12 @@ dependencies {
     implementation("com.google.firebase:firebase-firestore")
     implementation("com.google.firebase:firebase-messaging")
     implementation("com.google.firebase:firebase-storage")
-    implementation("androidx.media3:media3-exoplayer:1.4.1")
-    implementation("androidx.media3:media3-session:1.4.1")
-    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
     implementation("com.google.firebase:firebase-crashlytics")
     implementation("com.google.firebase:firebase-appcheck-playintegrity")
     implementation("com.google.firebase:firebase-appcheck-debug")
+    implementation("androidx.media3:media3-exoplayer:1.4.1")
+    implementation("androidx.media3:media3-session:1.4.1")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 }
